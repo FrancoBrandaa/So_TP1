@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99
+CFLAGS = -Wall -Wextra -std=c99 -fsanitize=address -fsanitize=leak -fno-omit-frame-pointer
 TARGETS = master view player
 
 all: $(TARGETS)

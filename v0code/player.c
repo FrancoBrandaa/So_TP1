@@ -15,7 +15,6 @@ void cleanup_player(void) {
 }
 
 void signal_handler(int sig) {
-    (void)sig;
     cleanup_player();
     exit(EXIT_FAILURE);
 }
