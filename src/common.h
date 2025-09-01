@@ -1,7 +1,7 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE
 
 #include <stdint.h>
 #include <limits.h>
@@ -47,28 +47,31 @@
 #define GAME_SYNC_SHM "/game_sync"
 
 // Estructura del jugador
-typedef struct {
-    char name[PLAYER_NAME_SIZE];        // Nombre del jugador
-    unsigned int score;                 // Puntaje
-    unsigned int invalid_moves;         // Cantidad de movimientos inválidos
-    unsigned int valid_moves;           // Cantidad de movimientos válidos
-    unsigned short x, y;                // Coordenadas x e y en el tablero
-    pid_t pid;                          // Identificador de proceso
-    bool blocked;                       // Indica si el jugador está bloqueado
+typedef struct
+{
+    char name[PLAYER_NAME_SIZE]; // Nombre del jugador
+    unsigned int score;          // Puntaje
+    unsigned int invalid_moves;  // Cantidad de movimientos inválidos
+    unsigned int valid_moves;    // Cantidad de movimientos válidos
+    unsigned short x, y;         // Coordenadas x e y en el tablero
+    pid_t pid;                   // Identificador de proceso
+    bool blocked;                // Indica si el jugador está bloqueado
 } player_t;
 
 // Estructura del estado del juego
-typedef struct {
-    unsigned short width;               // Ancho del tablero
-    unsigned short height;              // Alto del tablero
-    unsigned int player_count;          // Cantidad de jugadores
-    player_t players[MAX_PLAYERS];      // Lista de jugadores
-    bool game_finished;                 // Indica si el juego se ha terminado
-    int board[];                        // Tablero (flexible array member)
+typedef struct
+{
+    unsigned short width;          // Ancho del tablero
+    unsigned short height;         // Alto del tablero
+    unsigned int player_count;     // Cantidad de jugadores
+    player_t players[MAX_PLAYERS]; // Lista de jugadores
+    bool game_finished;            // Indica si el juego se ha terminado
+    int board[];                   // Tablero (flexible array member)
 } game_state_t;
 
 // Estructura de sincronización
-typedef struct {
+typedef struct
+{
     sem_t view_notify;                  // A: El máster le indica a la vista que hay cambios
     sem_t view_done;                    // B: La vista le indica al máster que terminó
     sem_t master_access;                // C: Mutex para evitar inanición del máster
