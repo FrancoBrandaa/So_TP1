@@ -1,7 +1,6 @@
 #ifndef COMMON_H
 #define COMMON_H
 
-#define _GNU_SOURCE
 #define _POSIX_C_SOURCE 200809L
 
 #include <stdint.h>
@@ -31,7 +30,7 @@
 #define DEFAULT_TIMEOUT 10
 #define MAX_REWARD 9
 #define MIN_REWARD 1
-#define PLAYER_NAME_SIZE 32
+#define PLAYER_NAME_SIZE 16
 
 // Direcciones de movimiento (0-7, comenzando arriba y en sentido horario)
 #define DIR_UP 0
