@@ -23,10 +23,130 @@ typedef struct
     int player_count;
 } game_config_t;
 
+void verify_resources_after_cleanup(void)
+{
+    printf("\n🧹 === VERIFICACIÓN DE RECURSOS LUEGO DE LIMPIEZA ===\n");
+    printf("📅 PID del master: %d\n", getpid());
+    
+    // 1. Verificar pipes abiertos usando /proc/self/fd
+    printf("\n📊 1. VERIFICANDO PIPES ABIERTOS:\n");
+    int pipe_count = 0;
+    
+    DIR *fd_dir = opendir("/proc/self/fd");
+    /*
+    /proc/self/ siempre se refiere al proceso que está ejecutando el código
+    */
+    if (fd_dir) {
+        struct dirent *entry;
+        while ((entry = readdir(fd_dir)) != NULL) {
+            if (entry->d_name[0] == '.') continue;
+            
+            char fd_path[256];
+            snprintf(fd_path, sizeof(fd_path), "/proc/self/fd/%s", entry->d_name);
+            
+            char link_target[256];
+            ssize_t len = readlink(fd_path, link_target, sizeof(link_target) - 1);
+            if (len > 0) {
+                link_target[len] = '\0';
+                if (strstr(link_target, "pipe:") != NULL) {
+                    printf("   ⚠️  Pipe abierto: FD %s -> %s\n", entry->d_name, link_target);
+                    pipe_count++;
+                }
+            }
+        }
+            /*hasta aca lo que hago es entrar al directorio de fds y leer los paths
+            si en alguno aparece pipe: quiere decir que hay pipes abiertos
+            */
+        closedir(fd_dir);
+        
+        if (pipe_count == 0) {
+            printf("   ✅ No hay pipes abiertos\n");
+        } else {
+            printf("   🚨 ENCONTRADOS %d pipes abiertos!\n", pipe_count);
+        }
+    } else {
+        printf("   ⚠️  No se pudo acceder a /proc/self/fd\n");
+    }
+    
+    // 2. Verificar memoria compartida
+    printf("\n📊 2. VERIFICANDO MEMORIA COMPARTIDA:\n");
+    bool shm_clean = true;
+    
+    // Construir paths usando las constantes definidas
+    char state_shm_path[256];
+    char sync_shm_path[256];
+    snprintf(state_shm_path, sizeof(state_shm_path), "/dev/shm%s", GAME_STATE_SHM);
+    snprintf(sync_shm_path, sizeof(sync_shm_path), "/dev/shm%s", GAME_SYNC_SHM);
+    
+    if (access(state_shm_path, F_OK) == 0) {
+        printf("   🚨 %s AÚN EXISTE!\n", state_shm_path);
+        shm_clean = false;
+    } else {
+        printf("   ✅ %s no existe\n", state_shm_path);
+    }
+    
+    if (access(sync_shm_path, F_OK) == 0) {
+        printf("   🚨 %s AÚN EXISTE!\n", sync_shm_path);
+        shm_clean = false;
+    } else {
+        printf("   ✅ %s no existe\n", sync_shm_path);
+    }
+    
+    // 3. Verificar procesos zombies hijos
+    printf("\n📊 3. VERIFICANDO PROCESOS ZOMBIES:\n");
+    int zombie_count = 0;
+    /*
+    	waitpid devuelve:
+	•	child PID si el hijo ya terminó (y en esta llamada queda recolectado).
+	•	0 si el hijo sigue ejecutando.
+	•	-1 en error.
+    */
+    
+    // Intentar waitpid no bloqueante para ver si hay zombies
+    for (int i = 0; i < player_count; i++) {
+        if (player_pids[i] > 0) {
+            int status;
+            pid_t result = waitpid(player_pids[i], &status, WNOHANG); //
+            if (result == player_pids[i]) {
+                // El proceso ya terminó pero no habíamos hecho wait
+                printf("   ⚠️  Player %d (PID %d) era zombie\n", i, player_pids[i]);
+                zombie_count++;
+            } else if (result == 0) {
+                printf("   🚨 Player %d (PID %d) aún corriendo\n", i, player_pids[i]);
+            }
+        }
+    }
+    
+    if (view_pid > 0) {
+        int status;
+        pid_t result = waitpid(view_pid, &status, WNOHANG);
+        if (result == view_pid) {
+            printf("   ⚠️  View (PID %d) era zombie\n", view_pid);
+            zombie_count++;
+        } else if (result == 0) {
+            printf("   🚨 View (PID %d) aún corriendo\n", view_pid);
+        }
+    }
+    
+    if (zombie_count == 0) {
+        printf("   ✅ No hay procesos zombies detectados y todos terminaron\n");
+    }
+    
+    printf("\n🏁 === RESUMEN ===\n");
+    printf("Pipes: %s\n", pipe_count == 0 ? "✅ LIMPIO" : "🚨 PROBLEMAS");
+    printf("SHM: %s\n", shm_clean ? "✅ LIMPIO" : "🚨 PROBLEMAS");
+    printf("Zombies: %s\n", zombie_count == 0 ? "✅ LIMPIO" : "🚨 PROBLEMAS");
+    printf("====================================\n\n");
+    
+    // Pausa para poder inspeccionar con herramientas externas
+    printf("💤 Pausando 5 segundos para inspección externa...\n");
+    sleep(5);
+}
+
 void cleanup_resources(void)
 {
     // Cerrar pipes
-    if (player_pipes)
+    if (player_pipes) //los vuelvo a cerrar aca porque en caso de salir del gameloop de forma anticipada me aseguro de cerrarlos
     {
         for (int i = 0; i < player_count; i++)
         {
@@ -42,20 +162,20 @@ void cleanup_resources(void)
         free(player_pipes);
     }
 
-    // Limpiar memoria compartida
-    if (game_state)
+   
+    if (game_state) //saco el mapeo de memoria en mi proceso
         munmap(game_state, sizeof(game_state_t) + sizeof(int) * game_state->width * game_state->height);
     if (game_sync)
         munmap(game_sync, sizeof(game_sync_t));
-    if (state_shm_fd != -1)
+    if (state_shm_fd != -1) //libera los descriptores
         close(state_shm_fd);
     if (sync_shm_fd != -1)
         close(sync_shm_fd);
 
-    shm_unlink(GAME_STATE_SHM);
-    shm_unlink(GAME_SYNC_SHM);
-
-    if (player_pids)
+    shm_unlink(GAME_STATE_SHM); //elimina la entrada a la shared memory     
+    shm_unlink(GAME_SYNC_SHM); //hasta que los procesos que la usan no la cierren
+                                //el kernel no liberara la memoria
+    if (player_pids)            //esto se hace en el master porque se supne que es el ultimo bro
         free(player_pids);
 }
 
@@ -554,6 +674,10 @@ int main(int argc, char *argv[])
     game_loop(&config);
     wait_for_processes(&config);
 
+    // Verificar recursos antes de limpiar
+    // verify_resources_before_cleanup();
+    
     cleanup_resources();
+    verify_resources_after_cleanup();
     return 0;
 }

@@ -3,6 +3,8 @@
 static game_state_t *game_state = NULL;
 static game_sync_t *game_sync = NULL;
 
+
+//same as cleanup player
 void cleanup_view(void) {
     if (game_state) {
         size_t state_size = sizeof(game_state_t) + sizeof(int) * game_state->width * game_state->height;

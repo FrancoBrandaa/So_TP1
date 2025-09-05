@@ -4,6 +4,10 @@ static game_state_t *game_state = NULL;
 static game_sync_t *game_sync = NULL;
 static int player_id = -1;
 
+
+/*
+ desmapear (con munmap) las regiones de memoria que el proceso mapeó con mmap
+*/
 void cleanup_player(void) {
     if (game_state) {
         size_t state_size = sizeof(game_state_t) + sizeof(int) * game_state->width * game_state->height;
@@ -156,7 +160,7 @@ int main(int argc, char *argv[]) {
         // Enviar movimiento
         if (write(STDOUT_FILENO, &move, 1) != 1) {
             break; // Error o pipe cerrado
-        }
+        } //acordemosnos que el master redirigio stdout de los players
     }
     
     cleanup_player();

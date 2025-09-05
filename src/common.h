@@ -21,6 +21,7 @@
 #include <time.h>
 #include <stdbool.h>
 #include <sys/select.h>
+#include <dirent.h>
 
 #define MAX_PLAYERS 9
 #define MIN_BOARD_SIZE 10
