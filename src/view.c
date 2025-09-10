@@ -118,7 +118,7 @@ int main(int argc, char *argv[]) {
     if (argc != 3) {
         print_usage_view(argv[0]);
         return EXIT_FAILURE;
-    }
+    } //esta de mas
     
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);

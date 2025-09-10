@@ -16,6 +16,8 @@ void cleanup_player(void) {
     if (game_sync) {
         munmap(game_sync, sizeof(game_sync_t));
     }
+
+    //limpear el pipe del mismo
 }
 
 void signal_handler(int sig) {
@@ -73,10 +75,10 @@ int find_player_id(void) {
     return id;
 }
 
-unsigned char choose_move(void) {
-    // Estrategia simple: buscar la celda adyacente con mayor recompensa
-    player_t *me = &game_state->players[player_id];
-    
+
+//utilizo los valores locales guardados para decidir el movimiento
+// lo que se hace es buscar en todas las direcciones el mejor reward y me muevo segun el mejor (greedy)
+unsigned char choose_move_with_local_data(player_t *my_player, int *local_board, int board_width, int board_height) {
     unsigned char best_move = 0;
     int best_reward = -1;
     
@@ -84,13 +86,20 @@ unsigned char choose_move(void) {
         int dx, dy;
         get_direction_offset(dir, &dx, &dy);
         
-        int new_x = me->x + dx;
-        int new_y = me->y + dy;
+        int new_x = my_player->x + dx;
+        int new_y = my_player->y + dy;
         
-        if (is_cell_free(game_state, new_x, new_y)) {
-            int reward = get_board_cell(game_state, new_x, new_y);
-            if (reward > best_reward) {
-                best_reward = reward;
+        // Validar límites usando datos locales
+        if (new_x < 0 || new_x >= board_width || new_y < 0 || new_y >= board_height) {
+            continue;
+        }
+        
+        // Obtener valor del tablero local
+        int cell_value = local_board[new_y * board_width + new_x];
+        // Verificar si la celda está libre (valor positivo = recompensa)
+        if (cell_value >= MIN_REWARD && cell_value <= MAX_REWARD) {
+            if (cell_value > best_reward) {
+                best_reward = cell_value;
                 best_move = dir;
             }
         }
@@ -100,8 +109,8 @@ unsigned char choose_move(void) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 3) {
-        print_usage_player(argv[0]);
+    if (argc != 3) { // inncesario el chequeo este porque el master les pasa el default
+        print_usage_player(argv[0]); //por lo tanto es funcion innecesaria
         return EXIT_FAILURE;
     }
     
@@ -115,9 +124,8 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Invalid board dimensions\n");
         return EXIT_FAILURE;
     }
-    
     connect_shared_memory(width, height);
-    
+
     // Encontrar nuestro ID de jugador
     player_id = find_player_id();
     if (player_id == -1) {
@@ -130,7 +138,7 @@ int main(int argc, char *argv[]) {
         // Esperar permiso para moverse
         sem_wait(&game_sync->player_can_move[player_id]);
         
-        // Leer estado del juego
+        // tipico problema de lectores escritores xd
         sem_wait(&game_sync->reader_count_mutex);
         game_sync->reader_count++;
         if (game_sync->reader_count == 1) {
@@ -138,14 +146,22 @@ int main(int argc, char *argv[]) {
         }
         sem_post(&game_sync->reader_count_mutex);
         
+        // COPIAR TODO EL ESTADO NECESARIO A VARIABLES LOCALES
         bool game_finished = game_state->game_finished;
         bool blocked = game_state->players[player_id].blocked;
         
-        unsigned char move = 0;
-        if (!game_finished && !blocked) {
-            move = choose_move();
-        }
+        // Copiar datos del jugador actual
+        player_t my_player = game_state->players[player_id];
         
+        // Copiar tablero a buffer local (solo lo necesario)
+        int local_board[game_state->width * game_state->height];
+        memcpy(local_board, game_state->board, sizeof(int) * game_state->width * game_state->height);
+        
+        // Copiar dimensiones
+        int board_width = game_state->width;
+        int board_height = game_state->height;
+        
+        //  libero semaforos
         sem_wait(&game_sync->reader_count_mutex);
         game_sync->reader_count--;
         if (game_sync->reader_count == 0) {
@@ -153,14 +169,25 @@ int main(int argc, char *argv[]) {
         }
         sem_post(&game_sync->reader_count_mutex);
         
+        unsigned char move = 0;
+        if (!game_finished && !blocked) {
+            // Usar datos locales para calcular movimiento
+            move = choose_move_with_local_data(&my_player, local_board, board_width, board_height);
+            
+            // SLEEP SOLO PARA EL PLAYER 0 (para testing)
+            if (player_id == 0) {
+                sleep(3); // Player 0 es lento
+            }
+        } 
+        
         if (game_finished || blocked) {
             break;
         }
         
-        // Enviar movimiento
+        // Enviar movimiento al master
         if (write(STDOUT_FILENO, &move, 1) != 1) {
             break; // Error o pipe cerrado
-        } //acordemosnos que el master redirigio stdout de los players
+        }
     }
     
     cleanup_player();

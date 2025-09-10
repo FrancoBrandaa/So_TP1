@@ -479,7 +479,7 @@ bool check_game_end(void)
 
 void notify_view(void)
 {
-    if (view_pid > 0)
+    if (view_pid > 0) //porque este chequeo?
     {
         sem_post(&game_sync->view_notify);
         sem_wait(&game_sync->view_done);
@@ -507,6 +507,16 @@ void game_loop(game_config_t *config)
 
     while (!game_state->game_finished)
     {
+        /*
+        chicos el uso el Fd_set complementado con selectes para manejar multiples pipes
+        y no quedarme bloqueado esperando a un solo jugador
+        1. limpio el set
+        2. agrego los pipes de los jugadores activos
+        3. llamo a select con timeout de 1 segundo
+        4. si select me dice que hay datos leo en round robin
+        5. si no hay datos en 1 segundo verifico timeout global
+        6. si timeout global se cumplio termino el juego
+        */
         FD_ZERO(&readfds);
         bool has_active_players = false;
 
@@ -533,8 +543,9 @@ void game_loop(game_config_t *config)
 
         if (ready == -1)
         {
-            if (errno == EINTR)
-                continue;
+            //si el select fue interrumpido por una señal no es un error
+            // entonces continua el loop
+            if (errno == EINTR) continue;
             error_exit("select");
         }
 
@@ -568,15 +579,18 @@ void game_loop(game_config_t *config)
                 // EOF - jugador bloqueado
                 game_state->players[player_id].blocked = true;
                 close(player_pipes[player_id][0]);
-                player_pipes[player_id][0] = -1;
+                player_pipes[player_id][0] = -1; //para que no intente cerrarlo de nuevo en cleanup
                 continue;
             }
 
             if (bytes_read == -1)
             {
-                if (errno == EAGAIN || errno == EWOULDBLOCK)
+                if (errno == EAGAIN || errno == EWOULDBLOCK) 
+                { // Si no hay datos disponibles, continuar 
                     continue;
+                }
                 error_exit("read move");
+
             }
 
             // Procesar movimiento
@@ -664,7 +678,7 @@ int main(int argc, char *argv[])
     signal(SIGTERM, signal_handler);
 
     parse_arguments(argc, argv, &config);
-    player_count = config.player_count;
+    player_count = config.player_count; //la usan algunas funciones pues es una global pero esstaria bueno que consulten a la config y borrar esta linea
 
     initialize_shared_memory(&config);
     initialize_board(&config);
@@ -673,9 +687,6 @@ int main(int argc, char *argv[])
 
     game_loop(&config);
     wait_for_processes(&config);
-
-    // Verificar recursos antes de limpiar
-    // verify_resources_before_cleanup();
     
     cleanup_resources();
     verify_resources_after_cleanup();

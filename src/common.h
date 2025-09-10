@@ -94,4 +94,7 @@ void print_usage_master(const char *program_name);
 void print_usage_view(const char *program_name);
 void print_usage_player(const char *program_name);
 
+// Funciones específicas del player
+unsigned char choose_move_with_local_data(player_t *my_player, int *local_board, int board_width, int board_height);
+
 #endif
