@@ -473,9 +473,12 @@ void game_loop(game_config_t *config)
 
         // Verificar condiciones de fin del juego con protección
         bool should_end = false;
-        if (!has_active_players) {
+        if (!has_active_players)
+        {
             should_end = true;
-        } else {
+        }
+        else
+        {
             // Proteger el acceso para check_game_end()
             sem_wait(&game_sync->state_mutex);
             should_end = check_game_end();

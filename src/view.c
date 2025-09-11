@@ -235,6 +235,111 @@ void print_board(void)
     refresh(); // Actualizar pantalla
 }
 
+void show_final_winner(void)
+{
+    clear();
+
+    // Banner de juego terminado con mejor formato
+    attron(A_BOLD | A_BLINK);
+    printw("\n\n");
+    printw("  ==========================================\n");
+    printw("  |              GAME FINISHED!            |\n");
+    printw("  ==========================================\n");
+    attroff(A_BOLD | A_BLINK);
+
+    printw("\n");
+
+    // Encontrar ganador
+    int winner = -1;
+    unsigned int max_score = 0;
+    unsigned int min_valid_moves = UINT32_MAX;
+    unsigned int min_invalid_moves = UINT32_MAX;
+
+    for (unsigned int i = 0; i < game_state->player_count; i++)
+    {
+        player_t *p = &game_state->players[i];
+        if (p->score > max_score ||
+            (p->score == max_score && p->valid_moves < min_valid_moves) ||
+            (p->score == max_score && p->valid_moves == min_valid_moves && p->invalid_moves < min_invalid_moves))
+        {
+            winner = i;
+            max_score = p->score;
+            min_valid_moves = p->valid_moves;
+            min_invalid_moves = p->invalid_moves;
+        }
+    }
+
+    if (winner >= 0)
+    {
+        // Mostrar ganador con mucho estilo
+        attron(COLOR_PAIR(winner + 1) | A_BOLD);
+        printw("    *** WINNER: %s ***\n", game_state->players[winner].name);
+        printw("    Score: %u points\n", max_score);
+        printw("    Efficiency: %u valid moves, %u invalid moves\n", min_valid_moves, min_invalid_moves);
+        attroff(COLOR_PAIR(winner + 1) | A_BOLD);
+    }
+    else
+    {
+        attron(A_BOLD);
+        printw("  *** IT'S A TIE! ***\n");
+        attroff(A_BOLD);
+    }
+
+    printw("\n");
+    printw("  ----------- FINAL STANDINGS -----------\n");
+
+    // Mostrar todos los jugadores ordenados por puntaje
+    for (unsigned int i = 0; i < game_state->player_count; i++)
+    {
+        player_t *p = &game_state->players[i];
+
+        attron(COLOR_PAIR(i + 1));
+        if (i == (unsigned int)winner)
+        {
+            attron(A_BOLD);
+            printw("  > ");
+        }
+        else
+        {
+            printw("    ");
+        }
+
+        printw("%-8s: %3u pts", p->name, p->score);
+
+        // Barra visual del score más bonita
+        int score_bars = p->score / 10;
+        if (score_bars > 20)
+            score_bars = 20;
+        printw(" [");
+        for (int j = 0; j < score_bars; j++)
+        {
+            printw("#");
+        }
+        for (int j = score_bars; j < 20; j++)
+        {
+            printw("-");
+        }
+        printw("]");
+
+        if (i == (unsigned int)winner)
+        {
+            attroff(A_BOLD);
+        }
+        attroff(COLOR_PAIR(i + 1));
+        printw("\n");
+    }
+
+    printw("  ---------------------------------------\n");
+    printw("\n");
+    printw("    Thanks for playing ChompChamps!\n");
+    printw("    Game will close in 5 seconds...\n\n");
+
+    refresh();
+
+    // Sleep por 5 segundos
+    sleep(5);
+}
+
 int main(int argc, char *argv[])
 {
     if (argc != 3)
@@ -281,6 +386,8 @@ int main(int argc, char *argv[])
         // Salir si el juego terminó
         if (game_state->game_finished)
         {
+            // Mostrar pantalla final con ganador y esperar 5 segundos
+            show_final_winner();
             break;
         }
     }
