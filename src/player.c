@@ -1,3 +1,5 @@
+// This is a personal academic project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 #include "common.h"
 
 static game_state_t *game_state = NULL;
@@ -176,7 +178,7 @@ int main(int argc, char *argv[]) {
             
             // SLEEP SOLO PARA EL PLAYER 0 (para testing)
             if (player_id == 0) {
-                sleep(3); // Player 0 es lento
+                //sleep(3); // Player 0 es lento
             }
         } 
         
