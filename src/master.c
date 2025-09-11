@@ -25,126 +25,6 @@ typedef struct
     int player_count;
 } game_config_t;
 
-// void verify_resources_after_cleanup(void)
-// {
-//     printf("\n🧹 === VERIFICACIÓN DE RECURSOS LUEGO DE LIMPIEZA ===\n");
-//     printf("📅 PID del master: %d\n", getpid());
-
-//     // 1. Verificar pipes abiertos usando /proc/self/fd
-//     printf("\n📊 1. VERIFICANDO PIPES ABIERTOS:\n");
-//     int pipe_count = 0;
-
-//     DIR *fd_dir = opendir("/proc/self/fd");
-//     /*
-//     /proc/self/ siempre se refiere al proceso que está ejecutando el código
-//     */
-//     if (fd_dir) {
-//         struct dirent *entry;
-//         while ((entry = readdir(fd_dir)) != NULL) {
-//             if (entry->d_name[0] == '.') continue;
-
-//             char fd_path[256];
-//             snprintf(fd_path, sizeof(fd_path), "/proc/self/fd/%s", entry->d_name);
-
-//             char link_target[256];
-//             ssize_t len = readlink(fd_path, link_target, sizeof(link_target) - 1);
-//             if (len > 0) {
-//                 link_target[len] = '\0';
-//                 if (strstr(link_target, "pipe:") != NULL) {
-//                     printf("   ⚠️  Pipe abierto: FD %s -> %s\n", entry->d_name, link_target);
-//                     pipe_count++;
-//                 }
-//             }
-//         }
-//             /*hasta aca lo que hago es entrar al directorio de fds y leer los paths
-//             si en alguno aparece pipe: quiere decir que hay pipes abiertos
-//             */
-//         closedir(fd_dir);
-
-//         if (pipe_count == 0) {
-//             printf("   ✅ No hay pipes abiertos\n");
-//         } else {
-//             printf("   🚨 ENCONTRADOS %d pipes abiertos!\n", pipe_count);
-//         }
-//     } else {
-//         printf("   ⚠️  No se pudo acceder a /proc/self/fd\n");
-//     }
-
-//     // 2. Verificar memoria compartida
-//     printf("\n📊 2. VERIFICANDO MEMORIA COMPARTIDA:\n");
-//     bool shm_clean = true;
-
-//     // Construir paths usando las constantes definidas
-//     char state_shm_path[256];
-//     char sync_shm_path[256];
-//     snprintf(state_shm_path, sizeof(state_shm_path), "/dev/shm%s", GAME_STATE_SHM);
-//     snprintf(sync_shm_path, sizeof(sync_shm_path), "/dev/shm%s", GAME_SYNC_SHM);
-
-//     if (access(state_shm_path, F_OK) == 0) {
-//         printf("   🚨 %s AÚN EXISTE!\n", state_shm_path);
-//         shm_clean = false;
-//     } else {
-//         printf("   ✅ %s no existe\n", state_shm_path);
-//     }
-
-//     if (access(sync_shm_path, F_OK) == 0) {
-//         printf("   🚨 %s AÚN EXISTE!\n", sync_shm_path);
-//         shm_clean = false;
-//     } else {
-//         printf("   ✅ %s no existe\n", sync_shm_path);
-//     }
-
-//     // 3. Verificar procesos zombies hijos
-//     printf("\n📊 3. VERIFICANDO PROCESOS ZOMBIES:\n");
-//     int zombie_count = 0;
-//     /*
-//     	waitpid devuelve:
-// 	•	child PID si el hijo ya terminó (y en esta llamada queda recolectado).
-// 	•	0 si el hijo sigue ejecutando.
-// 	•	-1 en error.
-//     */
-
-//     // Intentar waitpid no bloqueante para ver si hay zombies
-//     for (int i = 0; i < player_count; i++) {
-//         if (player_pids[i] > 0) {
-//             int status;
-//             pid_t result = waitpid(player_pids[i], &status, WNOHANG); //
-//             if (result == player_pids[i]) {
-//                 // El proceso ya terminó pero no habíamos hecho wait
-//                 printf("   ⚠️  Player %d (PID %d) era zombie\n", i, player_pids[i]);
-//                 zombie_count++;
-//             } else if (result == 0) {
-//                 printf("   🚨 Player %d (PID %d) aún corriendo\n", i, player_pids[i]);
-//             }
-//         }
-//     }
-
-//     if (view_pid > 0) {
-//         int status;
-//         pid_t result = waitpid(view_pid, &status, WNOHANG);
-//         if (result == view_pid) {
-//             printf("   ⚠️  View (PID %d) era zombie\n", view_pid);
-//             zombie_count++;
-//         } else if (result == 0) {
-//             printf("   🚨 View (PID %d) aún corriendo\n", view_pid);
-//         }
-//     }
-
-//     if (zombie_count == 0) {
-//         printf("   ✅ No hay procesos zombies detectados y todos terminaron\n");
-//     }
-
-//     printf("\n🏁 === RESUMEN ===\n");
-//     printf("Pipes: %s\n", pipe_count == 0 ? "✅ LIMPIO" : "🚨 PROBLEMAS");
-//     printf("SHM: %s\n", shm_clean ? "✅ LIMPIO" : "🚨 PROBLEMAS");
-//     printf("Zombies: %s\n", zombie_count == 0 ? "✅ LIMPIO" : "🚨 PROBLEMAS");
-//     printf("====================================\n\n");
-
-//     // Pausa para poder inspeccionar con herramientas externas
-//     printf("💤 Pausando 5 segundos para inspección externa...\n");
-//     sleep(5);
-// }
-
 void cleanup_resources(void)
 {
     // Cerrar pipes
@@ -448,6 +328,13 @@ bool process_move(int player_id, unsigned char direction)
     if (!is_cell_free(game_state, new_x, new_y))
     {
         player->invalid_moves++;
+
+        // Después de un movimiento inválido, verificar si el jugador debe ser bloqueado
+        if (!player_has_valid_moves(game_state, player_id))
+        {
+            player->blocked = true;
+        }
+
         return false;
     }
 
@@ -461,7 +348,38 @@ bool process_move(int player_id, unsigned char direction)
     player->y = new_y;
     set_board_cell(game_state, new_x, new_y, -(player_id + 1));
 
+    // Después de un movimiento válido, verificar si el jugador debe ser bloqueado
+    if (!player_has_valid_moves(game_state, player_id))
+    {
+        player->blocked = true;
+    }
+
     return true;
+}
+
+bool player_has_valid_moves(game_state_t *state, unsigned int player_id)
+{
+    if (player_id >= state->player_count)
+        return false;
+
+    player_t *player = &state->players[player_id];
+
+    // Verificar las 8 direcciones
+    for (unsigned char dir = 0; dir < 8; dir++)
+    {
+        int dx, dy;
+        get_direction_offset(dir, &dx, &dy);
+
+        int new_x = player->x + dx;
+        int new_y = player->y + dy;
+
+        if (is_cell_free(state, new_x, new_y))
+        {
+            return true; // Encontró al menos un movimiento válido
+        }
+    }
+
+    return false; // No tiene movimientos válidos
 }
 
 bool check_game_end(void)
@@ -521,8 +439,13 @@ void game_loop(game_config_t *config)
 
     notify_view(); // Mostrar estado inicial
 
-    while (!game_state->game_finished)
+    bool game_finished = false;
+    while (!game_finished)
     {
+        // Leer estado del juego con protección
+        sem_wait(&game_sync->state_mutex);
+        game_finished = game_state->game_finished;
+        sem_post(&game_sync->state_mutex);
         /*
         chicos el uso el Fd_set complementado con selectes para manejar multiples pipes
         y no quedarme bloqueado esperando a un solo jugador
@@ -536,7 +459,8 @@ void game_loop(game_config_t *config)
         FD_ZERO(&readfds);
         bool has_active_players = false;
 
-        // Agregar pipes de jugadores activos al set
+        // Agregar pipes de jugadores activos al set (con protección)
+        sem_wait(&game_sync->state_mutex);
         for (int i = 0; i < config->player_count; i++)
         {
             if (!game_state->players[i].blocked)
@@ -545,10 +469,24 @@ void game_loop(game_config_t *config)
                 has_active_players = true;
             }
         }
+        sem_post(&game_sync->state_mutex);
 
-        if (!has_active_players || check_game_end())
+        // Verificar condiciones de fin del juego con protección
+        bool should_end = false;
+        if (!has_active_players) {
+            should_end = true;
+        } else {
+            // Proteger el acceso para check_game_end()
+            sem_wait(&game_sync->state_mutex);
+            should_end = check_game_end();
+            sem_post(&game_sync->state_mutex);
+        }
+
+        if (should_end)
         {
+            sem_wait(&game_sync->state_mutex);
             game_state->game_finished = true;
+            sem_post(&game_sync->state_mutex);
             break;
         }
 
@@ -583,7 +521,12 @@ void game_loop(game_config_t *config)
         {
             int player_id = (current_player + attempts) % config->player_count;
 
-            if (game_state->players[player_id].blocked || !FD_ISSET(player_pipes[player_id][0], &readfds))
+            // Verificar si el jugador está bloqueado con protección
+            sem_wait(&game_sync->state_mutex);
+            bool player_blocked = game_state->players[player_id].blocked;
+            sem_post(&game_sync->state_mutex);
+
+            if (player_blocked || !FD_ISSET(player_pipes[player_id][0], &readfds))
             {
                 continue;
             }
@@ -593,8 +536,10 @@ void game_loop(game_config_t *config)
 
             if (bytes_read == 0)
             {
-                // EOF - jugador bloqueado
+                // EOF - jugador bloqueado (con protección)
+                sem_wait(&game_sync->state_mutex);
                 game_state->players[player_id].blocked = true;
+                sem_post(&game_sync->state_mutex);
                 close(player_pipes[player_id][0]);
                 player_pipes[player_id][0] = -1; // para que no intente cerrarlo de nuevo en cleanup
                 continue;
@@ -622,8 +567,16 @@ void game_loop(game_config_t *config)
             sem_post(&game_sync->state_mutex);
             sem_post(&game_sync->master_access);
 
-            // Notificar al jugador que puede enviar otro movimiento
-            sem_post(&game_sync->player_can_move[player_id]);
+            // Verificar si el jugador está bloqueado después del movimiento (con protección)
+            sem_wait(&game_sync->state_mutex);
+            bool player_still_blocked = game_state->players[player_id].blocked;
+            sem_post(&game_sync->state_mutex);
+
+            // Solo notificar al jugador que puede enviar otro movimiento si NO está bloqueado
+            if (!player_still_blocked)
+            {
+                sem_post(&game_sync->player_can_move[player_id]);
+            }
 
             processed_move = true;
             current_player = (player_id + 1) % config->player_count;
@@ -637,7 +590,7 @@ void game_loop(game_config_t *config)
     }
 
     // Notificar fin del juego
-    //game_state->game_finished = true;
+    // game_state->game_finished = true;
 
     // Cerrar pipes de lectura para que los jugadores reciban EOF
     for (int i = 0; i < config->player_count; i++)

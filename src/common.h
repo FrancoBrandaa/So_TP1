@@ -90,6 +90,7 @@ void set_board_cell(game_state_t *state, int x, int y, int value);
 bool is_valid_position(game_state_t *state, int x, int y);
 bool is_cell_free(game_state_t *state, int x, int y);
 void get_direction_offset(unsigned char direction, int *dx, int *dy);
+bool player_has_valid_moves(game_state_t *state, unsigned int player_id);
 void print_usage_master(const char *program_name);
 void print_usage_view(const char *program_name);
 void print_usage_player(const char *program_name);

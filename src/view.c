@@ -1,9 +1,44 @@
 // This is a personal academic project. Dear PVS-Studio, please check it.
 // PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
 #include "common.h"
+#include <ncurses.h>
+
+// Definiciones de colores para jugadores
+#define COLOR_PLAYER_1 1
+#define COLOR_PLAYER_2 2
+#define COLOR_PLAYER_3 3
+#define COLOR_PLAYER_4 4
+#define COLOR_PLAYER_5 5
+#define COLOR_PLAYER_6 6
+#define COLOR_PLAYER_7 7
+#define COLOR_PLAYER_8 8
+#define COLOR_PLAYER_9 9
+#define COLOR_REWARDS 10
 
 static game_state_t *game_state = NULL;
 static game_sync_t *game_sync = NULL;
+
+void init_colors(void)
+{
+    if (has_colors())
+    {
+        start_color();
+
+        // Definir pares de colores para jugadores (texto brillante sobre fondo negro)
+        init_pair(COLOR_PLAYER_1, COLOR_RED, COLOR_BLACK);
+        init_pair(COLOR_PLAYER_2, COLOR_GREEN, COLOR_BLACK);
+        init_pair(COLOR_PLAYER_3, COLOR_BLUE, COLOR_BLACK);
+        init_pair(COLOR_PLAYER_4, COLOR_YELLOW, COLOR_BLACK);
+        init_pair(COLOR_PLAYER_5, COLOR_MAGENTA, COLOR_BLACK);
+        init_pair(COLOR_PLAYER_6, COLOR_CYAN, COLOR_BLACK);
+        init_pair(COLOR_PLAYER_7, COLOR_WHITE, COLOR_BLACK);
+        init_pair(COLOR_PLAYER_8, COLOR_RED, COLOR_BLACK); // Reutilizamos colores si hay más de 7
+        init_pair(COLOR_PLAYER_9, COLOR_GREEN, COLOR_BLACK);
+
+        // Color para recompensas (blanco)
+        init_pair(COLOR_REWARDS, COLOR_WHITE, COLOR_BLACK);
+    }
+}
 
 // same as cleanup player
 void cleanup_view(void)
@@ -17,6 +52,8 @@ void cleanup_view(void)
     {
         munmap(game_sync, sizeof(game_sync_t));
     }
+    // Limpiar ncurses
+    endwin();
 }
 
 void signal_handler(int sig)
@@ -53,58 +90,116 @@ void connect_shared_memory(int width, int height)
 
 void print_board(void)
 {
-    printf("\n=== ChompChamps Game State ===\n");
-    printf("Board Size: %dx%d\n", game_state->width, game_state->height);
-    printf("Players: %u\n", game_state->player_count); // V576: player_count es unsigned int
-    printf("Game Finished: %s\n\n", game_state->game_finished ? "Yes" : "No");
+    clear(); // Limpiar pantalla
+
+    printw("\n=== ChompChamps Game State ===\n");
+    printw("Board Size: %dx%d\n", game_state->width, game_state->height);
+    printw("Players: %u\n", game_state->player_count);
+    printw("Game Finished: %s\n\n", game_state->game_finished ? "Yes" : "No");
 
     // Imprimir información de jugadores
-    printf("Players Status:\n");
+    printw("=== PLAYERS STATUS ===\n");
     for (unsigned int i = 0; i < game_state->player_count; i++)
     {
         player_t *p = &game_state->players[i];
-        printf("  %s: Position(%d,%d) Score=%u Valid=%u Invalid=%u %s\n",
-               p->name, p->x, p->y, p->score, p->valid_moves, p->invalid_moves,
-               p->blocked ? "[BLOCKED]" : "");
+
+        // Usar color del jugador para el indicador
+        attron(COLOR_PAIR(i + 1) | A_BOLD);
+        printw("  [P%u] ", i + 1);
+        attroff(COLOR_PAIR(i + 1) | A_BOLD);
+
+        // Nombre y posición
+        printw("%s: Pos(%d,%d) Score=%u ", p->name, p->x, p->y, p->score);
+
+        // Barra visual del score (cada asterisco = ~20 puntos)
+        int score_bars = p->score / 20;
+        if (score_bars > 10)
+            score_bars = 10; // Máximo 10 asteriscos
+
+        attron(COLOR_PAIR(i + 1));
+        for (int j = 0; j < score_bars; j++)
+        {
+            printw("*");
+        }
+        attroff(COLOR_PAIR(i + 1));
+
+        // Stats y estado
+        printw(" (Valid:%u Invalid:%u)", p->valid_moves, p->invalid_moves);
+
+        if (p->blocked)
+        {
+            printw(" [BLOCKED]");
+        }
+
+        printw("\n");
     }
-    printf("\n");
+    printw("\n");
 
     // Imprimir tablero
-    printf("Board:\n");
-    printf("   ");
+    printw("Board:\n");
+
+    // Números de columnas
+    printw("   ");
     for (int x = 0; x < game_state->width; x++)
     {
-        printf("%2d ", x);
+        printw("%2d ", x);
     }
-    printf("\n");
+    printw("\n");
 
     for (int y = 0; y < game_state->height; y++)
     {
-        printf("%2d ", y);
+        printw("%2d ", y);
         for (int x = 0; x < game_state->width; x++)
         {
             int cell = get_board_cell(game_state, x, y);
 
-            if (cell >= MIN_REWARD && cell <= MAX_REWARD)
+            // Verificar si esta posición es la cabeza de algún jugador
+            bool is_head = false;
+            int head_player = -1;
+            for (unsigned int i = 0; i < game_state->player_count; i++)
             {
-                printf(" %d ", cell); // Recompensa
+                if (game_state->players[i].x == x && game_state->players[i].y == y)
+                {
+                    is_head = true;
+                    head_player = i + 1; // +1 porque los jugadores se numeran desde 1
+                    break;
+                }
+            }
+
+            if (is_head)
+            {
+                // Cabeza del jugador - usar color brillante
+                attron(COLOR_PAIR(head_player) | A_BOLD);
+                printw("P%d ", head_player);
+                attroff(COLOR_PAIR(head_player) | A_BOLD);
+            }
+            else if (cell >= MIN_REWARD && cell <= MAX_REWARD)
+            {
+                // Recompensa - color blanco
+                attron(COLOR_PAIR(COLOR_REWARDS));
+                printw(" %d ", cell);
+                attroff(COLOR_PAIR(COLOR_REWARDS));
             }
             else if (cell <= 0 && cell >= -MAX_PLAYERS)
             {
-                printf("P%d ", -cell); // Jugador
+                // Cuerpo del jugador - usar color del jugador pero más tenue
+                int player_num = -cell;
+                attron(COLOR_PAIR(player_num));
+                printw(" # "); // Bloque sólido para el cuerpo
+                attroff(COLOR_PAIR(player_num));
             }
             else
             {
-                printf(" ? "); // Valor desconocido
+                printw(" ? "); // Valor desconocido
             }
         }
-        printf("\n");
+        printw("\n");
     }
-    printf("\n");
+    printw("\n");
 
     if (game_state->game_finished)
     {
-        printf("=== GAME FINISHED ===\n");
+        printw("=== GAME FINISHED ===\n");
 
         // Encontrar ganador
         int winner = -1;
@@ -128,16 +223,16 @@ void print_board(void)
 
         if (winner >= 0)
         {
-            printf("Winner: %s with score %u\n", game_state->players[winner].name, max_score);
+            printw("Winner: %s with score %u\n", game_state->players[winner].name, max_score);
         }
         else
         {
-            printf("Game ended in a tie!\n");
+            printw("Game ended in a tie!\n");
         }
     }
 
-    printf("================================\n\n");
-    fflush(stdout);
+    printw("================================\n\n");
+    refresh(); // Actualizar pantalla
 }
 
 int main(int argc, char *argv[])
@@ -161,6 +256,16 @@ int main(int argc, char *argv[])
     }
 
     connect_shared_memory(width, height);
+
+    // Inicializar ncurses
+    initscr();
+    noecho();    // No mostrar las teclas presionadas
+    cbreak();    // Leer teclas inmediatamente
+    curs_set(0); // Ocultar cursor
+    clear();     // Limpiar pantalla
+
+    // Inicializar colores
+    init_colors();
 
     while (true)
     {
