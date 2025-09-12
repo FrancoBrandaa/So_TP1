@@ -98,4 +98,11 @@ void print_usage_player(const char *program_name);
 // Funciones específicas del player
 unsigned char choose_move_with_local_data(player_t *my_player, int *local_board, int board_width, int board_height);
 
+// Funciones genéricas para memoria compartida
+void cleanup_shared_memory(game_state_t *game_state, game_sync_t *game_sync);
+int connect_shared_memory(int width, int height, game_state_t **game_state, game_sync_t **game_sync);
+
+// Funciones para lógica del juego
+int find_winner(game_state_t *state);
+
 #endif

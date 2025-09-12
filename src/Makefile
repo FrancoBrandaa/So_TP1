@@ -34,7 +34,8 @@ master: master.c utils.c
 	$(CC) $(CFLAGS) -o master master.c utils.c
 
 view: view.c utils.c
-	$(CC) $(CFLAGS) -o view view.c utils.c -lncurses
+#$(CC) $(CFLAGS) -o view view.c utils.c -lncurses
+	$(CC) $(CFLAGS) -o view view.c utils.c
 
 player: player.c utils.c
 	$(CC) $(CFLAGS) -o player player.c utils.c
