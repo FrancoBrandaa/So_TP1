@@ -180,7 +180,7 @@ int main(int argc, char *argv[])
             // SLEEP SOLO PARA EL PLAYER 0 (para testing)
             if (player_id == 0)
             {
-                // sleep(3); // Player 0 es lento
+                //sleep(11); // Player 0 es lento
             }
         }
 

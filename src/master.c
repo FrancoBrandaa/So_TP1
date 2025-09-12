@@ -496,7 +496,7 @@ void game_loop(game_config_t *config)
         timeout.tv_sec = 1;
         timeout.tv_usec = 0;
 
-        int ready = select(max_fd + 1, &readfds, NULL, NULL, &timeout);
+        int ready = select(max_fd + 1, &readfds, NULL, NULL, &timeout); //10s
 
         if (ready == -1)
         {
@@ -507,22 +507,19 @@ void game_loop(game_config_t *config)
             error_exit("select");
         }
 
-        if (ready == 0)
+        if (time(NULL) - last_valid_move > config->timeout)
         {
-            // Timeout - verificar timeout global
-            if (time(NULL) - last_valid_move > config->timeout)
-            {
-                // Proteger escritura del flag de fin de juego
-                sem_wait(&game_sync->state_mutex);
-                game_state->game_finished = true;
-                sem_post(&game_sync->state_mutex);
-                break;
-            }
-            continue;
+            // Proteger escritura del flag de fin de juego
+            sem_wait(&game_sync->state_mutex);
+            game_state->game_finished = true;
+            sem_post(&game_sync->state_mutex);
+            break;
         }
 
         // Procesar movimientos en round-robin
         bool processed_move = false;
+        int starting_player = current_player; // Recordar desde dónde empezamos
+        
         for (int attempts = 0; attempts < config->player_count && !processed_move; attempts++)
         {
             int player_id = (current_player + attempts) % config->player_count;
@@ -585,13 +582,19 @@ void game_loop(game_config_t *config)
             }
 
             processed_move = true;
+            // Actualizar current_player para que la próxima ronda empiece desde el siguiente jugador
             current_player = (player_id + 1) % config->player_count;
 
             // Notificar a la vista
             notify_view();
-
             // Esperar delay
             usleep(config->delay * 1000);
+        }
+        
+        // Si no se procesó ningún movimiento en esta ronda, avanzar current_player
+        // para evitar quedarse siempre en el mismo punto de partida
+        if (!processed_move) {
+            current_player = (starting_player + 1) % config->player_count;
         }
     }
 
@@ -683,6 +686,5 @@ int main(int argc, char *argv[])
     wait_for_processes(&config);
 
     cleanup_resources();
-    // verify_resources_after_cleanup();
     return 0;
 }
