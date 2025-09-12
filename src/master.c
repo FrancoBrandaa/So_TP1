@@ -512,7 +512,10 @@ void game_loop(game_config_t *config)
             // Timeout - verificar timeout global
             if (time(NULL) - last_valid_move > config->timeout)
             {
+                // Proteger escritura del flag de fin de juego
+                sem_wait(&game_sync->state_mutex);
                 game_state->game_finished = true;
+                sem_post(&game_sync->state_mutex);
                 break;
             }
             continue;
@@ -638,7 +641,19 @@ void wait_for_processes(game_config_t *config)
     {
         int status;
         waitpid(view_pid, &status, 0);
-        printf("View process finished\n");
+        printf("View (PID %d): ", view_pid);
+        if (WIFEXITED(status))
+        {
+            printf("exited with code %d\n", WEXITSTATUS(status));
+        }
+        else if (WIFSIGNALED(status))
+        {
+            printf("terminated by signal %d\n", WTERMSIG(status));
+        }
+        else
+        {
+            printf("ended (unknown reason)\n");
+        }
     }
 
     // Liberar array de rutas de players
