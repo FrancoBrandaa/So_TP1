@@ -3,8 +3,67 @@
 
 #include "common.h"
 
+// Códigos ANSI para colores (sin ncurses)
+#define ANSI_RESET "\033[0m"
+#define ANSI_BOLD "\033[1m"
+#define ANSI_BLINK "\033[5m"
+
+// Colores para cada jugador
+#define ANSI_PLAYER_1 "\033[31m" // Rojo
+#define ANSI_PLAYER_2 "\033[32m" // Verde
+#define ANSI_PLAYER_3 "\033[34m" // Azul
+#define ANSI_PLAYER_4 "\033[33m" // Amarillo
+#define ANSI_PLAYER_5 "\033[35m" // Magenta
+#define ANSI_PLAYER_6 "\033[36m" // Cyan
+#define ANSI_PLAYER_7 "\033[37m" // Blanco
+#define ANSI_PLAYER_8 "\033[31m" // Rojo (reutilizado)
+#define ANSI_PLAYER_9 "\033[32m" // Verde (reutilizado)
+#define ANSI_REWARDS "\033[37m"  // Blanco para recompensas
+
 static game_state_t *game_state = NULL;
 static game_sync_t *game_sync = NULL;
+
+// Función para obtener el código de color ANSI de un jugador
+const char *get_player_color(int player_num)
+{
+    switch (player_num)
+    {
+    case 1:
+        return ANSI_PLAYER_1;
+    case 2:
+        return ANSI_PLAYER_2;
+    case 3:
+        return ANSI_PLAYER_3;
+    case 4:
+        return ANSI_PLAYER_4;
+    case 5:
+        return ANSI_PLAYER_5;
+    case 6:
+        return ANSI_PLAYER_6;
+    case 7:
+        return ANSI_PLAYER_7;
+    case 8:
+        return ANSI_PLAYER_8;
+    case 9:
+        return ANSI_PLAYER_9;
+    default:
+        return ANSI_RESET;
+    }
+}
+
+// Función para obtener el símbolo del cuerpo de cada jugador
+const char *get_player_body_symbol(int player_num)
+{
+    switch (player_num)
+    {
+    case 8:
+        return "@"; // @ para jugador 8 (diferente del # del jugador 1)
+    case 9:
+        return "@"; // @ para jugador 9 (diferente del # del jugador 2)
+    default:
+        return "#"; // # para jugadores 1-7
+    }
+}
 
 // same as cleanup player
 void cleanup_view(void)
@@ -34,19 +93,46 @@ void print_board(void)
     printf("Players: %u\n", game_state->player_count);
     printf("Game Finished: %s\n\n", game_state->game_finished ? "Yes" : "No");
 
-    // Imprimir información de jugadores
-    printf("Players Status:\n");
+    // Imprimir información de jugadores con colores y estilo
+    printf("=== PLAYERS STATUS ===\n");
     for (unsigned int i = 0; i < game_state->player_count; i++)
     {
         player_t *p = &game_state->players[i];
-        printf("  %s: Position(%d,%d) Score=%u Valid=%u Invalid=%u %s\n",
-               p->name, p->x, p->y, p->score, p->valid_moves, p->invalid_moves,
-               p->blocked ? "[BLOCKED]" : "");
+
+        // Usar color del jugador para el indicador con negrita
+        printf("%s%s[P%u]%s ", get_player_color(i + 1), ANSI_BOLD, i + 1, ANSI_RESET);
+
+        // Nombre y posición
+        printf("%s: Pos(%d,%d) Score=%u ", p->name, p->x, p->y, p->score);
+
+        // Barra visual del score (cada asterisco = ~20 puntos)
+        int score_bars = p->score / 20;
+        if (score_bars > 10)
+            score_bars = 10; // Máximo 10 asteriscos
+
+        printf("%s", get_player_color(i + 1));
+        for (int j = 0; j < score_bars; j++)
+        {
+            printf("*");
+        }
+        printf("%s", ANSI_RESET);
+
+        // Stats y estado
+        printf(" (Valid:%u Invalid:%u)", p->valid_moves, p->invalid_moves);
+
+        if (p->blocked)
+        {
+            printf(" [BLOCKED]");
+        }
+
+        printf("\n");
     }
     printf("\n");
 
     // Imprimir tablero
     printf("Board:\n");
+
+    // Números de columnas
     printf("   ");
     for (int x = 0; x < game_state->width; x++)
     {
@@ -61,13 +147,34 @@ void print_board(void)
         {
             int cell = get_board_cell(game_state, x, y);
 
-            if (cell >= MIN_REWARD && cell <= MAX_REWARD)
+            // Verificar si esta posición es la cabeza de algún jugador
+            bool is_head = false;
+            int head_player = -1;
+            for (unsigned int i = 0; i < game_state->player_count; i++)
             {
-                printf(" %d ", cell); // Recompensa
+                if (game_state->players[i].x == x && game_state->players[i].y == y)
+                {
+                    is_head = true;
+                    head_player = i + 1; // +1 porque los jugadores se numeran desde 1
+                    break;
+                }
+            }
+
+            if (is_head)
+            {
+                // Cabeza del jugador - usar color brillante
+                printf("%s%sP%d%s ", get_player_color(head_player), ANSI_BOLD, head_player, ANSI_RESET);
+            }
+            else if (cell >= MIN_REWARD && cell <= MAX_REWARD)
+            {
+                // Recompensa - color blanco
+                printf("%s %d %s", ANSI_REWARDS, cell, ANSI_RESET);
             }
             else if (cell <= 0 && cell >= -MAX_PLAYERS)
             {
-                printf("P%d ", -cell); // Jugador
+                // Cuerpo del jugador - usar color del jugador pero más tenue (sin negrita)
+                int player_num = -cell;
+                printf("%s %s %s", get_player_color(player_num), get_player_body_symbol(player_num), ANSI_RESET);
             }
             else
             {
@@ -99,6 +206,91 @@ void print_board(void)
 
     printf("================================\n\n");
     fflush(stdout);
+}
+
+void show_final_winner(void)
+{
+    printf("\n\n");
+
+    // Banner de juego terminado con mejor formato
+    printf("%s%s", ANSI_BOLD, ANSI_BLINK);
+    printf("  ==========================================\n");
+    printf("  |              GAME FINISHED!            |\n");
+    printf("  ==========================================\n");
+    printf("%s", ANSI_RESET);
+
+    printf("\n");
+
+    // Encontrar ganador usando función modularizada
+    int winner = find_winner(game_state);
+
+    if (winner >= 0)
+    {
+        // Mostrar ganador con mucho estilo
+        printf("%s%s", get_player_color(winner + 1), ANSI_BOLD);
+        printf("    *** WINNER: %s ***\n", game_state->players[winner].name);
+        printf("    Score: %u points\n", game_state->players[winner].score);
+        printf("    Efficiency: %u valid moves, %u invalid moves\n",
+               game_state->players[winner].valid_moves,
+               game_state->players[winner].invalid_moves);
+        printf("%s", ANSI_RESET);
+    }
+    else
+    {
+        printf("%s", ANSI_BOLD);
+        printf("  *** IT'S A TIE! ***\n");
+        printf("%s", ANSI_RESET);
+    }
+
+    printf("\n");
+    printf("  ----------- FINAL STANDINGS -----------\n");
+
+    // Mostrar todos los jugadores ordenados por puntaje
+    for (unsigned int i = 0; i < game_state->player_count; i++)
+    {
+        player_t *p = &game_state->players[i];
+
+        printf("%s", get_player_color(i + 1));
+        if (i == (unsigned int)winner)
+        {
+            printf("%s", ANSI_BOLD);
+            printf("  > ");
+        }
+        else
+        {
+            printf("    ");
+        }
+
+        printf("%-8s: %3u pts", p->name, p->score);
+
+        // Barra visual del score más bonita
+        int score_bars = p->score / 10;
+        if (score_bars > 20)
+            score_bars = 20;
+        printf(" [");
+        for (int j = 0; j < score_bars; j++)
+        {
+            printf("#");
+        }
+        for (int j = score_bars; j < 20; j++)
+        {
+            printf("-");
+        }
+        printf("]");
+
+        printf("%s", ANSI_RESET);
+        printf("\n");
+    }
+
+    printf("  ---------------------------------------\n");
+    printf("\n");
+    printf("    Thanks for playing ChompChamps!\n");
+    printf("    Game will close in 5 seconds...\n\n");
+
+    fflush(stdout);
+
+    // Sleep por 5 segundos
+    sleep(5);
 }
 
 int main(int argc, char *argv[])
@@ -137,6 +329,8 @@ int main(int argc, char *argv[])
         // Salir si el juego terminó
         if (game_state->game_finished)
         {
+            // Mostrar pantalla final con ganador y esperar 5 segundos
+            show_final_winner();
             break;
         }
     }
