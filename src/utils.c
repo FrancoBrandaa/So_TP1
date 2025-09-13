@@ -12,7 +12,7 @@ int get_board_cell(game_state_t *state, int x, int y)
 {
     if (x < 0 || x >= state->width || y < 0 || y >= state->height)
     {
-        return -999; // Valor inválido para indicar fuera de límites
+    return OUT_OF_BOUNDS_CELL_VALUE; // Valor inválido para indicar fuera de límites
     }
     return state->board[y * state->width + x];
 }

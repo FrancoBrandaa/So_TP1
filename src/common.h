@@ -33,6 +33,23 @@
 #define MIN_REWARD 1
 #define PLAYER_NAME_SIZE 16
 
+//
+#define SHM_PERMISSIONS 0666
+#define OUT_OF_BOUNDS_CELL_VALUE -999
+#define DIRECTIONS_COUNT 8
+#define SELECT_TIMEOUT_SECONDS 1
+#define US_TO_MS 1000
+#define INT_STR_BUF 16
+#define INVALID_FD -1
+#define SEM_INIT_ZERO 0
+#define SEM_INIT_ONE 1
+
+// Parámetros de visualización de barras de score
+#define SCORE_BAR_UNIT_STATE 20
+#define SCORE_BAR_MAX_STATE 10
+#define SCORE_BAR_UNIT_FINAL 10
+#define SCORE_BAR_MAX_FINAL 20
+
 // Direcciones de movimiento (0-7, comenzando arriba y en sentido horario)
 #define DIR_UP 0
 #define DIR_UP_RIGHT 1

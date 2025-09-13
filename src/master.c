@@ -3,12 +3,12 @@
 #include "common.h"
 
 // Variables globales para limpieza
-static int state_shm_fd = -1;
-static int sync_shm_fd = -1;
+static int state_shm_fd = INVALID_FD;
+static int sync_shm_fd = INVALID_FD;
 static game_state_t *game_state = NULL;
 static game_sync_t *game_sync = NULL;
 static pid_t *player_pids = NULL;
-static pid_t view_pid = -1;
+static pid_t view_pid = INVALID_FD;
 static int **player_pipes = NULL;
 static int player_count = 0;
 
@@ -34,10 +34,14 @@ void cleanup_resources(void)
         {
             if (player_pipes[i])
             {
-                if (player_pipes[i][0] != -1)
+                if (player_pipes[i][0] != -1) {
                     close(player_pipes[i][0]);
-                if (player_pipes[i][1] != -1)
+                    player_pipes[i][0] = -1;
+                }
+                if (player_pipes[i][1] != -1) {
                     close(player_pipes[i][1]);
+                    player_pipes[i][1] = -1;
+                }
                 free(player_pipes[i]);
             }
         }
@@ -304,6 +308,7 @@ void create_processes(game_config_t *config)
         {
             // Proceso padre
             close(player_pipes[i][1]); // Cerrar extremo de escritura
+            player_pipes[i][1] = -1;   // Evita doble cierre en cleanup
             game_state->players[i].pid = player_pids[i];
         }
     }
@@ -365,7 +370,7 @@ bool player_has_valid_moves(game_state_t *state, unsigned int player_id)
     player_t *player = &state->players[player_id];
 
     // Verificar las 8 direcciones
-    for (unsigned char dir = 0; dir < 8; dir++)
+    for (unsigned char dir = 0; dir < DIRECTIONS_COUNT; dir++)
     {
         int dx, dy;
         get_direction_offset(dir, &dx, &dy);
@@ -393,7 +398,7 @@ bool check_game_end(void)
         player_t *player = &game_state->players[i];
 
         // Verificar las 8 direcciones
-        for (unsigned char dir = 0; dir < 8; dir++)
+    for (unsigned char dir = 0; dir < DIRECTIONS_COUNT; dir++)
         {
             int dx, dy;
             get_direction_offset(dir, &dx, &dy);
@@ -413,7 +418,7 @@ bool check_game_end(void)
 
 void notify_view(void)
 {
-    if (view_pid > 0) // porque este chequeo?
+    if (view_pid > 0)
     {
         sem_post(&game_sync->view_notify);
         sem_wait(&game_sync->view_done);
@@ -493,15 +498,14 @@ void game_loop(game_config_t *config)
             break;
         }
 
-        timeout.tv_sec = 1;
+    timeout.tv_sec = SELECT_TIMEOUT_SECONDS;
         timeout.tv_usec = 0;
 
-        int ready = select(max_fd + 1, &readfds, NULL, NULL, &timeout); //10s
+    int ready = select(max_fd + 1, &readfds, NULL, NULL, &timeout);
 
         if (ready == -1)
         {
-            // si el select fue interrumpido por una señal no es un error
-            //  entonces continua el loop
+            // si el select fue interrumpido por una señal no es un error entonces continua el loop
             if (errno == EINTR)
                 continue;
             error_exit("select");
@@ -588,7 +592,7 @@ void game_loop(game_config_t *config)
             // Notificar a la vista
             notify_view();
             // Esperar delay
-            usleep(config->delay * 1000);
+            usleep(config->delay * US_TO_MS);
         }
         
         // Si no se procesó ningún movimiento en esta ronda, avanzar current_player
@@ -597,9 +601,6 @@ void game_loop(game_config_t *config)
             current_player = (starting_player + 1) % config->player_count;
         }
     }
-
-    // Notificar fin del juego
-    // game_state->game_finished = true;
 
     // Cerrar pipes de lectura para que los jugadores reciban EOF
     for (int i = 0; i < config->player_count; i++)
@@ -675,7 +676,7 @@ int main(int argc, char *argv[])
     signal(SIGTERM, signal_handler);
 
     parse_arguments(argc, argv, &config);
-    player_count = config.player_count; // la usan algunas funciones pues es una global pero esstaria bueno que consulten a la config y borrar esta linea
+    player_count = config.player_count; 
 
     initialize_shared_memory(&config);
     initialize_board(&config);

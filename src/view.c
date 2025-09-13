@@ -9,15 +9,13 @@
 #define ANSI_BLINK "\033[5m"
 
 // Colores para cada jugador
-#define ANSI_PLAYER_1 "\033[31m" // Rojo
-#define ANSI_PLAYER_2 "\033[32m" // Verde
+#define ANSI_PLAYER_1_AND_8 "\033[31m" // Rojo
+#define ANSI_PLAYER_2_AND_9 "\033[32m" // Verde
 #define ANSI_PLAYER_3 "\033[34m" // Azul
 #define ANSI_PLAYER_4 "\033[33m" // Amarillo
 #define ANSI_PLAYER_5 "\033[35m" // Magenta
 #define ANSI_PLAYER_6 "\033[36m" // Cyan
 #define ANSI_PLAYER_7 "\033[37m" // Blanco
-#define ANSI_PLAYER_8 "\033[31m" // Rojo (reutilizado)
-#define ANSI_PLAYER_9 "\033[32m" // Verde (reutilizado)
 #define ANSI_REWARDS "\033[37m"  // Blanco para recompensas
 
 static game_state_t *game_state = NULL;
@@ -29,9 +27,11 @@ const char *get_player_color(int player_num)
     switch (player_num)
     {
     case 1:
-        return ANSI_PLAYER_1;
+    case 8:
+        return ANSI_PLAYER_1_AND_8;
     case 2:
-        return ANSI_PLAYER_2;
+    case 9:
+        return ANSI_PLAYER_2_AND_9;
     case 3:
         return ANSI_PLAYER_3;
     case 4:
@@ -42,10 +42,6 @@ const char *get_player_color(int player_num)
         return ANSI_PLAYER_6;
     case 7:
         return ANSI_PLAYER_7;
-    case 8:
-        return ANSI_PLAYER_8;
-    case 9:
-        return ANSI_PLAYER_9;
     default:
         return ANSI_RESET;
     }
@@ -56,10 +52,10 @@ const char *get_player_body_symbol(int player_num)
 {
     switch (player_num)
     {
+    // Como 8 y 9 usan el mismo color que 1 y 2, usan el distinto símbolo
     case 8:
-        return "@"; // @ para jugador 8 (diferente del # del jugador 1)
     case 9:
-        return "@"; // @ para jugador 9 (diferente del # del jugador 2)
+        return "@"; // @ para jugador 8 y 9
     default:
         return "#"; // # para jugadores 1-7
     }
@@ -105,10 +101,10 @@ void print_board(void)
         // Nombre y posición
         printf("%s: Pos(%d,%d) Score=%u ", p->name, p->x, p->y, p->score);
 
-        // Barra visual del score (cada asterisco = ~20 puntos)
-        int score_bars = p->score / 20;
-        if (score_bars > 10)
-            score_bars = 10; // Máximo 10 asteriscos
+        // Barra visual del score (cada asterisco = ~SCORE_BAR_UNIT_STATE puntos)
+        int score_bars = p->score / SCORE_BAR_UNIT_STATE;
+        if (score_bars > SCORE_BAR_MAX_STATE)
+            score_bars = SCORE_BAR_MAX_STATE; // Máximo SCORE_BAR_MAX_STATE asteriscos
 
         printf("%s", get_player_color(i + 1));
         for (int j = 0; j < score_bars; j++)
@@ -155,7 +151,7 @@ void print_board(void)
                 if (game_state->players[i].x == x && game_state->players[i].y == y)
                 {
                     is_head = true;
-                    head_player = i + 1; // +1 porque los jugadores se numeran desde 1
+                    head_player = i + 1;
                     break;
                 }
             }
@@ -264,15 +260,15 @@ void show_final_winner(void)
         printf("%-8s: %3u pts", p->name, p->score);
 
         // Barra visual del score más bonita
-        int score_bars = p->score / 10;
-        if (score_bars > 20)
-            score_bars = 20;
+        int score_bars = p->score / SCORE_BAR_UNIT_FINAL;
+        if (score_bars > SCORE_BAR_MAX_FINAL)
+            score_bars = SCORE_BAR_MAX_FINAL;
         printf(" [");
         for (int j = 0; j < score_bars; j++)
         {
             printf("#");
         }
-        for (int j = score_bars; j < 20; j++)
+    for (int j = score_bars; j < SCORE_BAR_MAX_FINAL; j++)
         {
             printf("-");
         }
@@ -285,21 +281,19 @@ void show_final_winner(void)
     printf("  ---------------------------------------\n");
     printf("\n");
     printf("    Thanks for playing ChompChamps!\n");
-    printf("    Game will close in 5 seconds...\n\n");
 
     fflush(stdout);
-
-    // Sleep por 5 segundos
-    sleep(5);
 }
 
 int main(int argc, char *argv[])
 {
+    // Inncesario pues el master les pasa correctamente los parametros
+    // Lo dejamos por buena practica
     if (argc != 3)
     {
         print_usage_view(argv[0]);
         return EXIT_FAILURE;
-    } // esta de mas
+    } 
 
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
@@ -329,7 +323,7 @@ int main(int argc, char *argv[])
         // Salir si el juego terminó
         if (game_state->game_finished)
         {
-            // Mostrar pantalla final con ganador y esperar 5 segundos
+            // Mostrar pantalla final con ganador
             show_final_winner();
             break;
         }

@@ -65,13 +65,13 @@ int find_player_id(void)
 }
 
 // utilizo los valores locales guardados para decidir el movimiento
-//  lo que se hace es buscar en todas las direcciones el mejor reward y me muevo segun el mejor (greedy)
+// lo que se hace es buscar en todas las direcciones el mejor reward y me muevo hacia ahi (greedy)
 unsigned char choose_move_with_local_data(player_t *my_player, int *local_board, int board_width, int board_height)
 {
     unsigned char best_move = 0;
     int best_reward = -1;
 
-    for (unsigned char dir = 0; dir < 8; dir++)
+        for (unsigned char dir = 0; dir < DIRECTIONS_COUNT; dir++)
     {
         int dx, dy;
         get_direction_offset(dir, &dx, &dy);
@@ -81,9 +81,7 @@ unsigned char choose_move_with_local_data(player_t *my_player, int *local_board,
 
         // Validar límites usando datos locales
         if (new_x < 0 || new_x >= board_width || new_y < 0 || new_y >= board_height)
-        {
             continue;
-        }
 
         // Obtener valor del tablero local
         int cell_value = local_board[new_y * board_width + new_x];
@@ -138,7 +136,6 @@ int main(int argc, char *argv[])
         // Esperar permiso para moverse
         sem_wait(&game_sync->player_can_move[player_id]);
 
-        // tipico problema de lectores escritores xd
         sem_wait(&game_sync->reader_count_mutex);
         game_sync->reader_count++;
         if (game_sync->reader_count == 1)
@@ -147,7 +144,7 @@ int main(int argc, char *argv[])
         }
         sem_post(&game_sync->reader_count_mutex);
 
-        // COPIAR TODO EL ESTADO NECESARIO A VARIABLES LOCALES
+        // Copia todo el estado necesario en variables locales
         bool game_finished = game_state->game_finished;
         bool blocked = game_state->players[player_id].blocked;
 
@@ -176,18 +173,10 @@ int main(int argc, char *argv[])
         {
             // Usar datos locales para calcular movimiento
             move = choose_move_with_local_data(&my_player, local_board, board_width, board_height);
-
-            // SLEEP SOLO PARA EL PLAYER 0 (para testing)
-            if (player_id == 0)
-            {
-                //sleep(11); // Player 0 es lento
-            }
         }
 
         if (game_finished || blocked)
-        {
             break;
-        }
 
         // Enviar movimiento al master
         if (write(STDOUT_FILENO, &move, 1) != 1)

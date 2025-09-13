@@ -16,25 +16,12 @@ VALGRIND = valgrind \
 # Argumentos
 MASTER_ARGS ?= -v ./view -p ./player
 
-# === Verificación e instalación de dependencias ===
-check-deps:
-	@echo "Checking ncurses dependencies..."
-	@if ! dpkg -l | grep -q "libncurses.*-dev"; then \
-		echo "Installing ncurses development libraries..."; \
-		apt update && apt install -y libncurses-dev; \
-	else \
-		echo "ncurses development libraries already installed."; \
-	fi
-
 all: $(TARGETS)
-
-deps: check-deps
 
 master: master.c utils.c
 	$(CC) $(CFLAGS) -o master master.c utils.c
 
 view: view.c utils.c
-#$(CC) $(CFLAGS) -o view view.c utils.c -lncurses
 	$(CC) $(CFLAGS) -o view view.c utils.c
 
 player: player.c utils.c
@@ -52,4 +39,4 @@ valgrind: all
 clean:
 	rm -f $(TARGETS)
 
-.PHONY: all clean run valgrind check-deps deps
+.PHONY: all clean run valgrind
