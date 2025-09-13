@@ -34,11 +34,13 @@ void cleanup_resources(void)
         {
             if (player_pipes[i])
             {
-                if (player_pipes[i][0] != -1) {
+                if (player_pipes[i][0] != -1)
+                {
                     close(player_pipes[i][0]);
                     player_pipes[i][0] = -1;
                 }
-                if (player_pipes[i][1] != -1) {
+                if (player_pipes[i][1] != -1)
+                {
                     close(player_pipes[i][1]);
                     player_pipes[i][1] = -1;
                 }
@@ -232,7 +234,7 @@ void place_players(game_config_t *config)
 
     for (int i = 0; i < config->player_count; i++)
     {
-        snprintf(game_state->players[i].name, PLAYER_NAME_SIZE, "Player%d", i + 1);
+        snprintf(game_state->players[i].name, PLAYER_NAME_SIZE, "Player%d", i);
         game_state->players[i].score = 0;
         game_state->players[i].invalid_moves = 0;
         game_state->players[i].valid_moves = 0;
@@ -241,7 +243,7 @@ void place_players(game_config_t *config)
         game_state->players[i].blocked = false;
 
         // Marcar celda como ocupada
-        set_board_cell(game_state, positions[i][0], positions[i][1], -(i + 1));
+        set_board_cell(game_state, positions[i][0], positions[i][1], -i);
     }
 }
 
@@ -351,7 +353,7 @@ bool process_move(int player_id, unsigned char direction)
     // Actualizar posición
     player->x = new_x;
     player->y = new_y;
-    set_board_cell(game_state, new_x, new_y, -(player_id + 1));
+    set_board_cell(game_state, new_x, new_y, -player_id);
 
     // Después de un movimiento válido, verificar si el jugador debe ser bloqueado
     if (!player_has_valid_moves(game_state, player_id))
@@ -398,7 +400,7 @@ bool check_game_end(void)
         player_t *player = &game_state->players[i];
 
         // Verificar las 8 direcciones
-    for (unsigned char dir = 0; dir < DIRECTIONS_COUNT; dir++)
+        for (unsigned char dir = 0; dir < DIRECTIONS_COUNT; dir++)
         {
             int dx, dy;
             get_direction_offset(dir, &dx, &dy);
@@ -498,10 +500,10 @@ void game_loop(game_config_t *config)
             break;
         }
 
-    timeout.tv_sec = SELECT_TIMEOUT_SECONDS;
+        timeout.tv_sec = SELECT_TIMEOUT_SECONDS;
         timeout.tv_usec = 0;
 
-    int ready = select(max_fd + 1, &readfds, NULL, NULL, &timeout);
+        int ready = select(max_fd + 1, &readfds, NULL, NULL, &timeout);
 
         if (ready == -1)
         {
@@ -523,7 +525,7 @@ void game_loop(game_config_t *config)
         // Procesar movimientos en round-robin
         bool processed_move = false;
         int starting_player = current_player; // Recordar desde dónde empezamos
-        
+
         for (int attempts = 0; attempts < config->player_count && !processed_move; attempts++)
         {
             int player_id = (current_player + attempts) % config->player_count;
@@ -594,10 +596,11 @@ void game_loop(game_config_t *config)
             // Esperar delay
             usleep(config->delay * US_TO_MS);
         }
-        
+
         // Si no se procesó ningún movimiento en esta ronda, avanzar current_player
         // para evitar quedarse siempre en el mismo punto de partida
-        if (!processed_move) {
+        if (!processed_move)
+        {
             current_player = (starting_player + 1) % config->player_count;
         }
     }
@@ -676,7 +679,7 @@ int main(int argc, char *argv[])
     signal(SIGTERM, signal_handler);
 
     parse_arguments(argc, argv, &config);
-    player_count = config.player_count; 
+    player_count = config.player_count;
 
     initialize_shared_memory(&config);
     initialize_board(&config);

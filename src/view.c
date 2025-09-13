@@ -11,12 +11,12 @@
 // Colores para cada jugador
 #define ANSI_PLAYER_1_AND_8 "\033[31m" // Rojo
 #define ANSI_PLAYER_2_AND_9 "\033[32m" // Verde
-#define ANSI_PLAYER_3 "\033[34m" // Azul
-#define ANSI_PLAYER_4 "\033[33m" // Amarillo
-#define ANSI_PLAYER_5 "\033[35m" // Magenta
-#define ANSI_PLAYER_6 "\033[36m" // Cyan
-#define ANSI_PLAYER_7 "\033[37m" // Blanco
-#define ANSI_REWARDS "\033[37m"  // Blanco para recompensas
+#define ANSI_PLAYER_3 "\033[34m"       // Azul
+#define ANSI_PLAYER_4 "\033[33m"       // Amarillo
+#define ANSI_PLAYER_5 "\033[35m"       // Magenta
+#define ANSI_PLAYER_6 "\033[36m"       // Cyan
+#define ANSI_PLAYER_7 "\033[37m"       // Blanco
+#define ANSI_REWARDS "\033[37m"        // Blanco para recompensas
 
 static game_state_t *game_state = NULL;
 static game_sync_t *game_sync = NULL;
@@ -26,22 +26,22 @@ const char *get_player_color(int player_num)
 {
     switch (player_num)
     {
+    case 0:
+    case 7:
+        return ANSI_PLAYER_1_AND_8; // Rojo
     case 1:
     case 8:
-        return ANSI_PLAYER_1_AND_8;
+        return ANSI_PLAYER_2_AND_9; // Verde
     case 2:
-    case 9:
-        return ANSI_PLAYER_2_AND_9;
+        return ANSI_PLAYER_3; // Azul
     case 3:
-        return ANSI_PLAYER_3;
+        return ANSI_PLAYER_4; // Amarillo
     case 4:
-        return ANSI_PLAYER_4;
+        return ANSI_PLAYER_5; // Magenta
     case 5:
-        return ANSI_PLAYER_5;
+        return ANSI_PLAYER_6; // Cyan
     case 6:
-        return ANSI_PLAYER_6;
-    case 7:
-        return ANSI_PLAYER_7;
+        return ANSI_PLAYER_7; // Blanco
     default:
         return ANSI_RESET;
     }
@@ -52,12 +52,12 @@ const char *get_player_body_symbol(int player_num)
 {
     switch (player_num)
     {
-    // Como 8 y 9 usan el mismo color que 1 y 2, usan el distinto símbolo
+    // Como 7 y 8 usan el mismo color que 0 y 1, usan el distinto símbolo
+    case 7:
     case 8:
-    case 9:
-        return "@"; // @ para jugador 8 y 9
+        return "@"; // @ para jugador 7 y 8
     default:
-        return "#"; // # para jugadores 1-7
+        return "#"; // # para jugadores 0-6
     }
 }
 
@@ -96,7 +96,7 @@ void print_board(void)
         player_t *p = &game_state->players[i];
 
         // Usar color del jugador para el indicador con negrita
-        printf("%s%s[P%u]%s ", get_player_color(i + 1), ANSI_BOLD, i + 1, ANSI_RESET);
+        printf("%s%s[P%u]%s ", get_player_color(i), ANSI_BOLD, i, ANSI_RESET);
 
         // Nombre y posición
         printf("%s: Pos(%d,%d) Score=%u ", p->name, p->x, p->y, p->score);
@@ -106,7 +106,7 @@ void print_board(void)
         if (score_bars > SCORE_BAR_MAX_STATE)
             score_bars = SCORE_BAR_MAX_STATE; // Máximo SCORE_BAR_MAX_STATE asteriscos
 
-        printf("%s", get_player_color(i + 1));
+        printf("%s", get_player_color(i));
         for (int j = 0; j < score_bars; j++)
         {
             printf("*");
@@ -151,7 +151,7 @@ void print_board(void)
                 if (game_state->players[i].x == x && game_state->players[i].y == y)
                 {
                     is_head = true;
-                    head_player = i + 1;
+                    head_player = i; // Ahora usamos indexación 0-based
                     break;
                 }
             }
@@ -169,7 +169,7 @@ void print_board(void)
             else if (cell <= 0 && cell >= -MAX_PLAYERS)
             {
                 // Cuerpo del jugador - usar color del jugador pero más tenue (sin negrita)
-                int player_num = -cell;
+                int player_num = -cell; // Ahora 0-based directo
                 printf("%s %s %s", get_player_color(player_num), get_player_body_symbol(player_num), ANSI_RESET);
             }
             else
@@ -223,7 +223,7 @@ void show_final_winner(void)
     if (winner >= 0)
     {
         // Mostrar ganador con mucho estilo
-        printf("%s%s", get_player_color(winner + 1), ANSI_BOLD);
+        printf("%s%s", get_player_color(winner), ANSI_BOLD);
         printf("    *** WINNER: %s ***\n", game_state->players[winner].name);
         printf("    Score: %u points\n", game_state->players[winner].score);
         printf("    Efficiency: %u valid moves, %u invalid moves\n",
@@ -246,7 +246,7 @@ void show_final_winner(void)
     {
         player_t *p = &game_state->players[i];
 
-        printf("%s", get_player_color(i + 1));
+        printf("%s", get_player_color(i));
         if (i == (unsigned int)winner)
         {
             printf("%s", ANSI_BOLD);
@@ -268,7 +268,7 @@ void show_final_winner(void)
         {
             printf("#");
         }
-    for (int j = score_bars; j < SCORE_BAR_MAX_FINAL; j++)
+        for (int j = score_bars; j < SCORE_BAR_MAX_FINAL; j++)
         {
             printf("-");
         }
@@ -293,7 +293,7 @@ int main(int argc, char *argv[])
     {
         print_usage_view(argv[0]);
         return EXIT_FAILURE;
-    } 
+    }
 
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
