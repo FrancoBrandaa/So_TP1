@@ -453,16 +453,7 @@ void game_loop(game_config_t *config)
         sem_wait(&game_sync->state_mutex);
         game_finished = game_state->game_finished;
         sem_post(&game_sync->state_mutex);
-        /*
-        chicos el uso el Fd_set complementado con selectes para manejar multiples pipes
-        y no quedarme bloqueado esperando a un solo jugador
-        1. limpio el set
-        2. agrego los pipes de los jugadores activos
-        3. llamo a select con timeout de 1 segundo
-        4. si select me dice que hay datos leo en round robin
-        5. si no hay datos en 1 segundo verifico timeout global
-        6. si timeout global se cumplio termino el juego
-        */
+        
         FD_ZERO(&readfds);
         bool has_active_players = false;
 

@@ -5,6 +5,12 @@
 static game_state_t *game_state = NULL;
 static game_sync_t *game_sync = NULL;
 static int player_id = -1;
+// Para estrategia de un solo jugador
+// Estado single-player: recorrido de perímetros (clockwise) dynamic
+static int sp_initialized = 0;
+static int sp_finished = 0;
+static unsigned int sp_turn = 0;
+static unsigned char sp_dir = DIR_RIGHT; // dirección cardinal actual
 
 /*
  desmapear (con munmap) las regiones de memoria que el proceso mapeó con mmap
@@ -13,6 +19,7 @@ void cleanup_player(void)
 {
     cleanup_shared_memory(game_state, game_sync);
     // limpear el pipe del mismo
+    // nada dinámico ahora
 }
 
 void signal_handler(int sig)
@@ -71,7 +78,7 @@ unsigned char choose_move_with_local_data(player_t *my_player, int *local_board,
     unsigned char best_move = 0;
     int best_reward = -1;
 
-        for (unsigned char dir = 0; dir < DIRECTIONS_COUNT; dir++)
+    for (unsigned char dir = 0; dir < DIRECTIONS_COUNT; dir++)
     {
         int dx, dy;
         get_direction_offset(dir, &dx, &dy);
@@ -99,12 +106,103 @@ unsigned char choose_move_with_local_data(player_t *my_player, int *local_board,
     return best_move;
 }
 
+static inline int sp_cell_free(int *local_board, int w, int h, int x, int y)
+{
+    if (x < 0 || x >= w || y < 0 || y >= h)
+        return 0;
+    int v = local_board[y * w + x];
+    return (v >= MIN_REWARD && v <= MAX_REWARD);
+}
+
+static int sp_can_move_dir(int *local_board, int w, int h, int x, int y, unsigned char dir)
+{
+    int dx, dy;
+    get_direction_offset(dir, &dx, &dy);
+    return sp_cell_free(local_board, w, h, x + dx, y + dy);
+}
+
+static unsigned char sp_turn_left(unsigned char d)
+{
+    switch (d)
+    {
+    case DIR_UP:
+        return DIR_LEFT;
+    case DIR_LEFT:
+        return DIR_DOWN;
+    case DIR_DOWN:
+        return DIR_RIGHT;
+    default:
+        return DIR_UP; // DIR_RIGHT
+    }
+}
+static unsigned char sp_turn_right(unsigned char d)
+{
+    switch (d)
+    {
+    case DIR_UP:
+        return DIR_RIGHT;
+    case DIR_RIGHT:
+        return DIR_DOWN;
+    case DIR_DOWN:
+        return DIR_LEFT;
+    default:
+        return DIR_UP; // DIR_LEFT
+    }
+}
+
+static unsigned char choose_move_single_player_perimeter(player_t *my_player, int *local_board, int w, int h)
+{
+    int x = my_player->x, y = my_player->y;
+    if (!sp_initialized)
+    {
+        sp_initialized = 1;
+        sp_dir = DIR_RIGHT;
+        sp_turn = 0;
+        sp_finished = 0;
+        fprintf(stderr, "[WALL] init (%d,%d)\n", x, y);
+    }
+    if (sp_finished)
+        return DIR_RIGHT;
+
+    // mantener mano izquierda en pared: girar izquierda si se puede; luego recto; luego derecha; luego 180.
+    unsigned char left = sp_turn_left(sp_dir);
+    if (sp_can_move_dir(local_board, w, h, x, y, left))
+    {
+        sp_dir = left;
+        sp_turn++;
+        return sp_dir;
+    }
+    if (sp_can_move_dir(local_board, w, h, x, y, sp_dir))
+    {
+        sp_turn++;
+        return sp_dir;
+    }
+    unsigned char right = sp_turn_right(sp_dir);
+    if (sp_can_move_dir(local_board, w, h, x, y, right))
+    {
+        sp_dir = right;
+        sp_turn++;
+        return sp_dir;
+    }
+    unsigned char back = sp_turn_right(sp_turn_right(sp_dir));
+    if (sp_can_move_dir(local_board, w, h, x, y, back))
+    {
+        sp_dir = back;
+        sp_turn++;
+        return sp_dir;
+    }
+    // ninguna libre -> terminado
+    sp_finished = 1;
+    fprintf(stderr, "[WALL] finished (%d,%d) turns=%u\n", x, y, sp_turn);
+    return DIR_RIGHT;
+}
+
 int main(int argc, char *argv[])
 {
     // Inncesario pues el master les pasa correctamente los parametros
     // Lo dejamos por buena practica
     if (argc != 3)
-    {                               
+    {
         print_usage_player(argv[0]);
         return EXIT_FAILURE;
     }
@@ -121,7 +219,6 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
     connect_shared_memory_player(width, height);
-
     // Encontrar nuestro ID de jugador
     player_id = find_player_id();
     if (player_id == -1)
@@ -171,8 +268,14 @@ int main(int argc, char *argv[])
         unsigned char move = 0;
         if (!game_finished && !blocked)
         {
-            // Usar datos locales para calcular movimiento
-            move = choose_move_with_local_data(&my_player, local_board, board_width, board_height);
+            if (game_state->player_count == 1)
+            {
+                move = choose_move_single_player_perimeter(&my_player, local_board, board_width, board_height);
+                if (sp_finished)
+                    break;
+            }
+            else
+                move = choose_move_with_local_data(&my_player, local_board, board_width, board_height);
         }
 
         if (game_finished || blocked)
