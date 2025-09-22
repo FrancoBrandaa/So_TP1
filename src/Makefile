@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -g -Wall -Wextra -std=c99 
-TARGETS = view player master
+TARGETS = view player master ProxyPlayer
 
 # === Integración Valgrind ===
 VALGRIND = valgrind \
@@ -17,6 +17,9 @@ VALGRIND = valgrind \
 MASTER_ARGS ?= -v ./view -p ./player
 
 all: $(TARGETS)
+
+ProxyPlayer: ProxyPlayer.c utils.c
+	$(CC) $(CFLAGS) -o ProxyPlayer ProxyPlayer.c utils.c
 
 master: master.c utils.c
 	$(CC) $(CFLAGS) -o master master.c utils.c

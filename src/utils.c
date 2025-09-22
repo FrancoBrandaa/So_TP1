@@ -113,6 +113,7 @@ void cleanup_shared_memory(game_state_t *game_state, game_sync_t *game_sync)
         size_t state_size = sizeof(game_state_t) + sizeof(int) * game_state->width * game_state->height;
         munmap(game_state, state_size);
     }
+    
     if (game_sync)
     {
         munmap(game_sync, sizeof(game_sync_t));

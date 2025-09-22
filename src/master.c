@@ -5,8 +5,8 @@
 // Variables globales para limpieza
 static int state_shm_fd = INVALID_FD;
 static int sync_shm_fd = INVALID_FD;
-static game_state_t *game_state = NULL;
-static game_sync_t *game_sync = NULL;
+static game_state_t *game_state = NULL; //Estado logico del juego
+static game_sync_t *game_sync = NULL; // Estructura de sincronización
 static pid_t *player_pids = NULL;
 static pid_t view_pid = INVALID_FD;
 static int **player_pipes = NULL;
@@ -34,7 +34,7 @@ void cleanup_resources(void)
         {
             if (player_pipes[i])
             {
-                if (player_pipes[i][0] != -1)
+                if (player_pipes[i][0] != -1)//evitamos doble close
                 {
                     close(player_pipes[i][0]);
                     player_pipes[i][0] = -1;
@@ -73,7 +73,7 @@ void signal_handler(int sig)
     exit(EXIT_FAILURE);
 }
 
-void parse_arguments(int argc, char *argv[], game_config_t *config)
+void parse_arguments(int argc, char *argv[], game_config_t *config) // parsea los argumentos y completa config
 {
     // Inicializar configuración por defecto
     config->width = DEFAULT_WIDTH;
@@ -157,12 +157,13 @@ void parse_arguments(int argc, char *argv[], game_config_t *config)
     }
 }
 
-void initialize_shared_memory(game_config_t *config)
+void initialize_shared_memory(game_config_t *config)// Crea y mapea la memoria compartida para estado y sincronización
 {
     size_t state_size = sizeof(game_state_t) + sizeof(int) * config->width * config->height;
+    //Calcula el tamaño real a mapear para game_state: estructura base + arreglo flexible board (width*height ints).
 
-    // Crear memoria compartida para el estado
     state_shm_fd = shm_open(GAME_STATE_SHM, O_CREAT | O_RDWR, 0666);
+    // Crea/abre objeto de memoria compartida POSIX para el estado con lectura/escritura.
     if (state_shm_fd == -1)
         error_exit("shm_open state");
 
@@ -211,7 +212,7 @@ void initialize_shared_memory(game_config_t *config)
     }
 }
 
-void initialize_board(game_config_t *config)
+void initialize_board(game_config_t *config)// Recorre tablero y asigna recompensas aleatorias
 {
     srand(config->seed);
 
@@ -226,11 +227,13 @@ void initialize_board(game_config_t *config)
     }
 }
 
-void place_players(game_config_t *config)
+void place_players(game_config_t *config) // Coloca jugadores en posiciones iniciales y pone datos iniciales en cada jugador
 {
     // Distribución simple: colocar jugadores en esquinas y bordes
-    int positions[][2] = {
-        {0, 0}, {config->width - 1, 0}, {0, config->height - 1}, {config->width - 1, config->height - 1}, {config->width / 2, 0}, {config->width / 2, config->height - 1}, {0, config->height / 2}, {config->width - 1, config->height / 2}, {config->width / 2, config->height / 2}};
+    int positions[][2] = 
+    {
+        {0, 0}, {config->width - 1, 0}, {0, config->height - 1}, {config->width - 1, config->height - 1}, {config->width / 2, 0}, {config->width / 2, config->height - 1}, {0, config->height / 2}, {config->width - 1, config->height / 2}, {config->width / 2, config->height / 2}
+    };
 
     for (int i = 0; i < config->player_count; i++)
     {
@@ -249,7 +252,6 @@ void place_players(game_config_t *config)
 
 void create_processes(game_config_t *config)
 {
-
     // view
     if (config->view_path)
     {
@@ -306,6 +308,7 @@ void create_processes(game_config_t *config)
             execl(config->player_paths[i], config->player_paths[i], width_str, height_str, NULL);
             error_exit("execl player");
         }
+
         else
         {
             // Proceso padre
@@ -322,6 +325,7 @@ bool process_move(int player_id, unsigned char direction)
         return false;
 
     player_t *player = &game_state->players[player_id];
+    
     if (player->blocked)
         return false;
 
@@ -338,9 +342,7 @@ bool process_move(int player_id, unsigned char direction)
 
         // Después de un movimiento inválido, verificar si el jugador debe ser bloqueado
         if (!player_has_valid_moves(game_state, player_id))
-        {
             player->blocked = true;
-        }
 
         return false;
     }
@@ -357,9 +359,7 @@ bool process_move(int player_id, unsigned char direction)
 
     // Después de un movimiento válido, verificar si el jugador debe ser bloqueado
     if (!player_has_valid_moves(game_state, player_id))
-    {
         player->blocked = true;
-    }
 
     return true;
 }
@@ -435,7 +435,8 @@ void game_loop(game_config_t *config)
     time_t last_valid_move = time(NULL);
     int current_player = 0;
 
-    // Encontrar el descriptor más alto
+
+    // Encontrar el descriptor más alto para select
     for (int i = 0; i < config->player_count; i++)
     {
         if (player_pipes[i][0] > max_fd)
@@ -454,10 +455,11 @@ void game_loop(game_config_t *config)
         game_finished = game_state->game_finished;
         sem_post(&game_sync->state_mutex);
         
-        FD_ZERO(&readfds);
+        //Limpia el conjunto de FDs y flag para saber si hay jugadores no bloqueados
+        FD_ZERO(&readfds); 
         bool has_active_players = false;
 
-        // Agregar pipes de jugadores activos al set (con protección)
+        // Agregar pipes de jugadores activos al set (con protección) NO ENTIENDO
         sem_wait(&game_sync->state_mutex);
         for (int i = 0; i < config->player_count; i++)
         {
@@ -471,10 +473,10 @@ void game_loop(game_config_t *config)
 
         // Verificar condiciones de fin del juego con protección
         bool should_end = false;
+
         if (!has_active_players)
-        {
             should_end = true;
-        }
+
         else
         {
             // Proteger el acceso para check_game_end()
@@ -483,6 +485,7 @@ void game_loop(game_config_t *config)
             sem_post(&game_sync->state_mutex);
         }
 
+        //marca fin del juego en memoria compartida si se cumple alguna condicion
         if (should_end)
         {
             sem_wait(&game_sync->state_mutex);
@@ -494,6 +497,7 @@ void game_loop(game_config_t *config)
         timeout.tv_sec = SELECT_TIMEOUT_SECONDS;
         timeout.tv_usec = 0;
 
+        //espera a que haya actividad en los pipes de los jugadores
         int ready = select(max_fd + 1, &readfds, NULL, NULL, &timeout);
 
         if (ready == -1)
@@ -504,6 +508,7 @@ void game_loop(game_config_t *config)
             error_exit("select");
         }
 
+        // Verificar timeout global de inactividad
         if (time(NULL) - last_valid_move > config->timeout)
         {
             // Proteger escritura del flag de fin de juego
@@ -526,20 +531,24 @@ void game_loop(game_config_t *config)
             bool player_blocked = game_state->players[player_id].blocked;
             sem_post(&game_sync->state_mutex);
 
+            //Si bloqueado o su pipe no tuvo datos listos según select, salta a siguiente.
             if (player_blocked || !FD_ISSET(player_pipes[player_id][0], &readfds))
-            {
                 continue;
-            }
 
             unsigned char move;
+            //Lee direccion (1 byte)
             ssize_t bytes_read = read(player_pipes[player_id][0], &move, 1);
 
             if (bytes_read == 0)
             {
                 // EOF - jugador bloqueado (con protección)
+
+                //Marcamos al player como bloqueado
                 sem_wait(&game_sync->state_mutex);
                 game_state->players[player_id].blocked = true;
                 sem_post(&game_sync->state_mutex);
+
+                //Cerramos
                 close(player_pipes[player_id][0]);
                 player_pipes[player_id][0] = -1; // para que no intente cerrarlo de nuevo en cleanup
                 continue;
@@ -574,14 +583,13 @@ void game_loop(game_config_t *config)
 
             // Solo notificar al jugador que puede enviar otro movimiento si NO está bloqueado
             if (!player_still_blocked)
-            {
                 sem_post(&game_sync->player_can_move[player_id]);
-            }
 
             processed_move = true;
+
+
             // Actualizar current_player para que la próxima ronda empiece desde el siguiente jugador
             current_player = (player_id + 1) % config->player_count;
-
             // Notificar a la vista
             notify_view();
             // Esperar delay
@@ -591,9 +599,7 @@ void game_loop(game_config_t *config)
         // Si no se procesó ningún movimiento en esta ronda, avanzar current_player
         // para evitar quedarse siempre en el mismo punto de partida
         if (!processed_move)
-        {
             current_player = (starting_player + 1) % config->player_count;
-        }
     }
 
     // Cerrar pipes de lectura para que los jugadores reciban EOF
@@ -615,7 +621,7 @@ void game_loop(game_config_t *config)
     notify_view();
 }
 
-void wait_for_processes(game_config_t *config)
+void wait_for_processes(game_config_t *config)  // Espera a que terminen los procesos hijos y muestra sus resultados
 {
     // Esperar jugadores
     for (int i = 0; i < config->player_count; i++)
@@ -666,18 +672,23 @@ int main(int argc, char *argv[])
 {
     game_config_t config;
 
+    //Registrar en los manejadores de señal siginit y sigterm para limpieza
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
+    //Parseo de argumentos
     parse_arguments(argc, argv, &config);
     player_count = config.player_count;
 
     initialize_shared_memory(&config);
-    initialize_board(&config);
+
+    initialize_board(&config);// Recorre tablero y asigna recompensas aleatorias
     place_players(&config);
+
     create_processes(&config);
 
     game_loop(&config);
+
     wait_for_processes(&config);
 
     cleanup_resources();

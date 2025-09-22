@@ -71,144 +71,6 @@ int find_player_id(void)
     return id;
 }
 
-// utilizo los valores locales guardados para decidir el movimiento
-// lo que se hace es buscar en todas las direcciones el mejor reward y me muevo hacia ahi (greedy)
-unsigned char choose_move_with_local_data(player_t *my_player, int *local_board, int board_width, int board_height)
-{
-    unsigned char best_move = 0;
-    int best_reward = -1;
-
-    for (unsigned char dir = 0; dir < DIRECTIONS_COUNT; dir++)
-    {
-        int dx, dy;
-        get_direction_offset(dir, &dx, &dy);
-
-        int new_x = my_player->x + dx;
-        int new_y = my_player->y + dy;
-
-        // Validar límites usando datos locales
-        if (new_x < 0 || new_x >= board_width || new_y < 0 || new_y >= board_height)
-            continue;
-
-        // Obtener valor del tablero local
-        int cell_value = local_board[new_y * board_width + new_x];
-
-        // Verificar si la celda está libre (valor positivo = recompensa)
-        if (cell_value >= MIN_REWARD && cell_value <= MAX_REWARD)
-        {
-            if (cell_value > best_reward)
-            {
-                best_reward = cell_value;
-                best_move = dir;
-            }
-        }
-    }
-
-    return best_move;
-}
-
-static inline int sp_cell_free(int *local_board, int w, int h, int x, int y)
-{
-    if (x < 0 || x >= w || y < 0 || y >= h)
-        return 0;
-    int v = local_board[y * w + x];
-    return (v >= MIN_REWARD && v <= MAX_REWARD);
-}
-
-static int sp_can_move_dir(int *local_board, int w, int h, int x, int y, unsigned char dir)
-{
-    int dx, dy;
-    get_direction_offset(dir, &dx, &dy);
-    return sp_cell_free(local_board, w, h, x + dx, y + dy);
-}
-
-static unsigned char sp_turn_left(unsigned char d)
-{
-    switch (d)
-    {
-    case DIR_UP:
-        return DIR_LEFT;
-    case DIR_LEFT:
-        return DIR_DOWN;
-    case DIR_DOWN:
-        return DIR_RIGHT;
-    default:
-        return DIR_UP; // DIR_RIGHT
-    }
-}
-static unsigned char sp_turn_right(unsigned char d)
-{
-    switch (d)
-    {
-    case DIR_UP:
-        return DIR_RIGHT;
-    case DIR_RIGHT:
-        return DIR_DOWN;
-    case DIR_DOWN:
-        return DIR_LEFT;
-    default:
-        return DIR_UP; // DIR_LEFT
-    }
-}
-
-static unsigned char choose_move_single_player_perimeter(player_t *my_player, int *local_board, int w, int h)
-{
-    int x = my_player->x, y = my_player->y;
-
-    if (!sp_initialized)
-    {
-        sp_initialized = 1;
-        sp_dir = DIR_RIGHT;
-        sp_turn = 0;
-        sp_finished = 0;
-        fprintf(stderr, "[WALL] init (%d,%d)\n", x, y);
-    }
-
-    if (sp_finished)
-        return DIR_RIGHT;
-
-    // mantener mano izquierda en pared: girar izquierda si se puede; luego recto; luego derecha; luego 180.
-
-    //intento girar izquierda
-    unsigned char left = sp_turn_left(sp_dir);
-    if (sp_can_move_dir(local_board, w, h, x, y, left))
-    {
-        sp_dir = left;
-        sp_turn++;
-        return sp_dir;
-    }
-
-    // intento seguir recto
-    if (sp_can_move_dir(local_board, w, h, x, y, sp_dir))
-    {
-        sp_turn++;
-        return sp_dir;
-    }
-
-    // intento girar derecha
-    unsigned char right = sp_turn_right(sp_dir);
-    if (sp_can_move_dir(local_board, w, h, x, y, right))
-    {
-        sp_dir = right;
-        sp_turn++;
-        return sp_dir;
-    }
-
-    // intento dar vuelta
-    unsigned char back = sp_turn_right(sp_turn_right(sp_dir));
-    if (sp_can_move_dir(local_board, w, h, x, y, back))
-    {
-        sp_dir = back;
-        sp_turn++;
-        return sp_dir;
-    }
-    
-    // ninguna libre -> terminado
-    sp_finished = 1;
-    fprintf(stderr, "[WALL] finished (%d,%d) turns=%u\n", x, y, sp_turn);
-    return DIR_RIGHT;
-}
-
 int main(int argc, char *argv[])
 {
     // Inncesario pues el master les pasa correctamente los parametros
@@ -240,6 +102,17 @@ int main(int argc, char *argv[])
         cleanup_player();
         return EXIT_FAILURE;
     }
+
+    int status;
+
+    int child_pid = fork();
+    if(child_pid<0)
+        error_exit("proxy_player");
+    if(child_pid==0) // hijo
+        execl("/bin/true", "/bin/true", NULL);
+
+    waitpid(child_pid, &status, 0);
+    
 
     while (true)
     {
@@ -281,15 +154,7 @@ int main(int argc, char *argv[])
         unsigned char move = 0;
         if (!game_finished && !blocked)
         {
-            if (game_state->player_count == 1)
-            {
-                // estrategia de un solo jugador mano izquierda en pared 
-                move = choose_move_single_player_perimeter(&my_player, local_board, board_width, board_height);
-                if (sp_finished)
-                    break;
-            }
-            else
-                move = choose_move_with_local_data(&my_player, local_board, board_width, board_height);
+            move = status;
         }
 
         //verifico si se bloqueo en la eleccion del movimiento
